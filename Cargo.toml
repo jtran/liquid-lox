@@ -1,0 +1,8 @@
+[package]
+name = "lox"
+version = "0.1.0"
+authors = ["Jonathan Tran <jonnytran@gmail.com>"]
+
+[dependencies]
+lazy_static = "1.1.0"
+unicode-segmentation = "1.2.1"
