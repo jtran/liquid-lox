@@ -110,10 +110,10 @@ impl <'source, 'g> Scanner<'source, 'g> where 'source: 'g {
                     "\n" => self.line += 1,
                     "\"" => self.scan_string(),
                     _ => {
-                        if util::is_digit(grapheme_cluster) {
+                        if is_digit(grapheme_cluster) {
                             self.scan_number();
                         }
-                        else if util::is_alphabetic(grapheme_cluster) {
+                        else if is_alphabetic(grapheme_cluster) {
                             self.scan_identifier();
                         }
                         else {
@@ -244,7 +244,7 @@ impl <'source, 'g> Scanner<'source, 'g> where 'source: 'g {
             match self.grapheme_indices.peek() {
                 None => break,
                 Some((_, grapheme_cluster)) => {
-                    if ! util::is_digit(grapheme_cluster) {
+                    if ! is_digit(grapheme_cluster) {
                         break;
                     }
                 }
@@ -255,7 +255,7 @@ impl <'source, 'g> Scanner<'source, 'g> where 'source: 'g {
         // Look for a fractional part.
         if self.is_match(".") {
             if let Some(c) = self.peek_next_grapheme() {
-                if util::is_digit(c) {
+                if is_digit(c) {
                     // Consume the dot.
                     self.advance();
                 }
@@ -265,7 +265,7 @@ impl <'source, 'g> Scanner<'source, 'g> where 'source: 'g {
                 match self.grapheme_indices.peek() {
                     None => break,
                     Some((_, grapheme_cluster)) => {
-                        if ! util::is_digit(grapheme_cluster) {
+                        if ! is_digit(grapheme_cluster) {
                             break;
                         }
                     }
@@ -284,7 +284,7 @@ impl <'source, 'g> Scanner<'source, 'g> where 'source: 'g {
             match self.grapheme_indices.peek() {
                 None => break,
                 Some((_, grapheme_cluster)) => {
-                    if ! util::is_alphanumeric(grapheme_cluster) {
+                    if ! is_alphanumeric(grapheme_cluster) {
                         break;
                     }
                 }
@@ -324,5 +324,120 @@ impl <'source, 'g> Scanner<'source, 'g> where 'source: 'g {
         let text = &self.source[self.start..self.peek_index()];
         let token = Token::new(TokenType::Number, text, None, Some(value), self.line);
         self.tokens.push(token);
+    }
+}
+
+fn is_digit(grapheme: &str) -> bool {
+    // Note: built-in is_numeric() uses a more complicated unicode definition of
+    // numeric.
+    match grapheme {
+        "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => true,
+        _ => false,
+    }
+}
+
+fn is_alphabetic(grapheme: &str) -> bool {
+    grapheme.chars().all(|c| c.is_alphabetic() || c == '_')
+}
+
+fn is_alphanumeric(grapheme: &str) -> bool {
+    grapheme.chars().all(|c| c.is_alphanumeric() || c == '_')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scan_single_tokens() {
+        let mut s = Scanner::new("!");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Bang, "!", None, None, 1)]);
+        let mut s = Scanner::new(".");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Dot, ".", None, None, 1)]);
+        let mut s = Scanner::new("=");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Equal, "=", None, None, 1)]);
+        let mut s = Scanner::new("<");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Less, "<", None, None, 1)]);
+        let mut s = Scanner::new("()");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::LeftParen, "(", None, None, 1),
+                                         Token::new(TokenType::RightParen, ")", None, None, 1)]);
+        let mut s = Scanner::new("{}");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::LeftBrace, "{", None, None, 1),
+                                         Token::new(TokenType::RightBrace, "}", None, None, 1)]);
+        // Next line.
+        let mut s = Scanner::new("\n-");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Minus, "-", None, None, 2)]);
+    }
+
+    #[test]
+    fn test_scan_double_tokens() {
+        let mut s = Scanner::new("==");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::EqualEqual, "==", None, None, 1)]);
+        let mut s = Scanner::new("!=");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::BangEqual, "!=", None, None, 1)]);
+        let mut s = Scanner::new("<=");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::LessEqual, "<=", None, None, 1)]);
+    }
+
+    #[test]
+    fn test_scan_string() {
+        let mut s = Scanner::new("\"hello\"");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::String, "\"hello\"", Some("hello"), None, 1)]);
+        // Multi-line.
+        let mut s = Scanner::new("\"hello\nthere\"");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::String, "\"hello\nthere\"", Some("hello\nthere"), None, 1)]);
+    }
+
+    #[test]
+    fn test_scan_number() {
+        let mut s = Scanner::new("9.5");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Number, "9.5", None, Some(9.5), 1)]);
+        let mut s = Scanner::new("7");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Number, "7", None, Some(7.0), 1)]);
+        let mut s = Scanner::new("144.25.");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Number, "144.25", None, Some(144.25), 1),
+                                         Token::new(TokenType::Dot, ".", None, None, 1)]);
+    }
+
+    #[test]
+    fn test_scan_identifier() {
+        let mut s = Scanner::new("foo");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "foo", None, None, 1)]);
+        let mut s = Scanner::new("foo_bar2");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "foo_bar2", None, None, 1)]);
+    }
+
+    #[test]
+    fn test_scan_keywords() {
+        let mut s = Scanner::new("and");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::And, "and", None, None, 1)]);
+        let mut s = Scanner::new("class");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Class, "class", None, None, 1)]);
+        let mut s = Scanner::new("else");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Else, "else", None, None, 1)]);
+        let mut s = Scanner::new("false");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::False, "false", None, None, 1)]);
+        let mut s = Scanner::new("for");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::For, "for", None, None, 1)]);
+        let mut s = Scanner::new("fun");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Fun, "fun", None, None, 1)]);
+        let mut s = Scanner::new("if");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::If, "if", None, None, 1)]);
+        let mut s = Scanner::new("nil");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Nil, "nil", None, None, 1)]);
+        let mut s = Scanner::new("or");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Or, "or", None, None, 1)]);
+        let mut s = Scanner::new("print");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Print, "print", None, None, 1)]);
+        let mut s = Scanner::new("return");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Return, "return", None, None, 1)]);
+        let mut s = Scanner::new("this");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::This, "this", None, None, 1)]);
+        let mut s = Scanner::new("true");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::True, "true", None, None, 1)]);
+        let mut s = Scanner::new("var");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Var, "var", None, None, 1)]);
+        let mut s = Scanner::new("while");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::While, "while", None, None, 1)]);
     }
 }

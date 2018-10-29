@@ -18,7 +18,7 @@ pub enum TokenType {
     Print, Return, Super, This, True, Var, While,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Token<'a> {
     token_type: TokenType,
     lexeme: &'a str,
