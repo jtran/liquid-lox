@@ -337,11 +337,23 @@ fn is_digit(grapheme: &str) -> bool {
 }
 
 fn is_alphabetic(grapheme: &str) -> bool {
-    grapheme.chars().all(|c| c.is_alphabetic() || c == '_')
+    // Only look at the first base character.
+    match grapheme.chars().next() {
+        None => true,
+        Some(c) => {
+            c.is_alphabetic() || c == '_'
+        }
+    }
 }
 
 fn is_alphanumeric(grapheme: &str) -> bool {
-    grapheme.chars().all(|c| c.is_alphanumeric() || c == '_')
+    // Only look at the first base character.
+    match grapheme.chars().next() {
+        None => true,
+        Some(c) => {
+            c.is_alphanumeric() || c == '_'
+        }
+    }
 }
 
 #[cfg(test)]
@@ -405,6 +417,11 @@ mod tests {
         assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "foo", None, None, 1)]);
         let mut s = Scanner::new("foo_bar2");
         assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "foo_bar2", None, None, 1)]);
+        let mut s = Scanner::new("π");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "π", None, None, 1)]);
+        // Multi-character grapheme cluster.
+        let mut s = Scanner::new("y̆");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "y̆", None, None, 1)]);
     }
 
     #[test]
