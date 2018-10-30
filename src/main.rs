@@ -2,6 +2,8 @@
 extern crate lazy_static;
 extern crate unicode_segmentation;
 
+mod expr;
+mod parser;
 mod scanner;
 mod token;
 mod util;
@@ -12,6 +14,7 @@ use std::io;
 use std::io::prelude::*;
 use std::process;
 
+use parser::*;
 use scanner::*;
 
 fn main() {
@@ -64,8 +67,7 @@ fn run_file(file_path: &str) {
 fn run(source: String) {
     let mut scanner = Scanner::new(&source);
     let tokens = scanner.scan_tokens();
-
-    for token in tokens {
-        println!("{:?}", token);
-    }
+    let mut parser = Parser::new(tokens);
+    let ast = parser.parse();
+    println!("{:?}", ast);
 }

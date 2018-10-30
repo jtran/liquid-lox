@@ -20,11 +20,11 @@ pub enum TokenType {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Token<'a> {
-    token_type: TokenType,
-    lexeme: &'a str,
-    string_literal: Option<&'a str>,
-    float_literal: Option<f64>,
-    line: usize,
+    pub token_type: TokenType,
+    pub lexeme: &'a str,
+    pub string_literal: Option<&'a str>,
+    pub float_literal: Option<f64>,
+    pub line: usize,
 }
 
 impl <'a> Token<'a> {
