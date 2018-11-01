@@ -46,13 +46,12 @@ fn print_usage() {
 
 fn run_repl() {
     let stdin = io::stdin();
-    let mut read = stdin.lock();
     loop {
         print!("> ");
         io::stdout().flush().expect("run_repl: unable to flush stdout");
 
         let mut input = String::new();
-        match read.read_line(&mut input) {
+        match stdin.lock().read_line(&mut input) {
             Ok(_) => {
                 let result = run(input);
                 print_result(&result);
