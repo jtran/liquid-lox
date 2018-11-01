@@ -45,7 +45,14 @@ impl Interpreter {
                     },
                     BinaryOperator::Divide => {
                         match (left_val, right_val) {
-                            (NumberVal(x1), NumberVal(x2)) => Ok(NumberVal(x1 / x2)),
+                            (NumberVal(x1), NumberVal(x2)) => {
+                                if x2 == 0.0 {
+                                    Err(RuntimeError::new(*loc, "attempted to divide by zero"))
+                                }
+                                else {
+                                    Ok(NumberVal(x1 / x2))
+                                }
+                            }
                             _ => Err(RuntimeError::new(*loc, &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
                         }
                     },
@@ -129,6 +136,12 @@ mod tests {
         assert_eq!(eval("40 - 10"), Ok(NumberVal(30.0)));
         assert_eq!(eval("7 * 3"), Ok(NumberVal(21.0)));
         assert_eq!(eval("10 / 2"), Ok(NumberVal(5.0)));
+    }
+
+    #[test]
+    fn test_eval_divide_by_zero() {
+        let loc = SourceLoc::new(1);
+        assert_eq!(eval("1 / 0"), Err(RuntimeError::new(loc, "attempted to divide by zero")));
     }
 
     #[test]
