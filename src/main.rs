@@ -76,7 +76,7 @@ fn run(source: String) {
     let result = interpreter.evaluate(&ast);
     match result {
         Ok(value) => {
-            println!("{:?}", value);
+            println!("{}", value);
         }
         Err(e) => {
             println!("{}", e.message);

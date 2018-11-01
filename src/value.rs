@@ -16,18 +16,6 @@ pub enum RuntimeType {
     StringType,
 }
 
-impl fmt::Display for RuntimeType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use self::RuntimeType::*;
-        match self {
-            BoolType => write!(f, "bool"),
-            NilType => write!(f, "nil"),
-            NumberType => write!(f, "number"),
-            StringType => write!(f, "string"),
-        }
-    }
-}
-
 use self::Value::*;
 
 impl Value {
@@ -55,6 +43,29 @@ impl Value {
             NilVal => RuntimeType::NilType,
             NumberVal(_) => RuntimeType::NumberType,
             StringVal(_) => RuntimeType::StringType,
+        }
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            BoolVal(b) => write!(f, "{}", b),
+            NilVal => write!(f, "nil"),
+            NumberVal(x) => write!(f, "{}", x),
+            StringVal(s) => write!(f, "\"{}\"", s),
+        }
+    }
+}
+
+impl fmt::Display for RuntimeType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use self::RuntimeType::*;
+        match self {
+            BoolType => write!(f, "bool"),
+            NilType => write!(f, "nil"),
+            NumberType => write!(f, "number"),
+            StringType => write!(f, "string"),
         }
     }
 }
