@@ -79,7 +79,7 @@ fn run(source: String) {
             println!("{}", value);
         }
         Err(e) => {
-            println!("{}", e.message);
+            util::error(e.source_loc.line, &e.message);
         }
     }
 }

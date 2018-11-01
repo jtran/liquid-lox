@@ -30,14 +30,14 @@ impl <'a> Parser<'a> {
         loop {
             match self.matches(&vec![TokenType::BangEqual, TokenType::EqualEqual]) {
                 None => break,
-                Some(operator) => {
+                Some((operator, loc)) => {
                     let right = self.comparison();
                     let bin_op = match operator {
                         TokenType::BangEqual => BinaryOperator::NotEqual,
                         TokenType::EqualEqual => BinaryOperator::Equal,
                         _ => unreachable!(),
                     };
-                    expr = Expr::Binary(Box::new(expr), bin_op, Box::new(right));
+                    expr = Expr::Binary(Box::new(expr), bin_op, Box::new(right), loc);
                 }
             }
         }
@@ -54,7 +54,7 @@ impl <'a> Parser<'a> {
                                      TokenType::LessEqual,
                                      TokenType::GreaterEqual]) {
                 None => break,
-                Some(operator) => {
+                Some((operator, loc)) => {
                     let right = self.addition();
                     let bin_op = match operator {
                         TokenType::Less => BinaryOperator::Less,
@@ -63,7 +63,7 @@ impl <'a> Parser<'a> {
                         TokenType::GreaterEqual => BinaryOperator::GreaterEqual,
                         _ => unreachable!(),
                     };
-                    expr = Expr::Binary(Box::new(expr), bin_op, Box::new(right));
+                    expr = Expr::Binary(Box::new(expr), bin_op, Box::new(right), loc);
                 }
             }
         }
@@ -77,14 +77,14 @@ impl <'a> Parser<'a> {
         loop {
             match self.matches(&vec![TokenType::Minus, TokenType::Plus]) {
                 None => break,
-                Some(operator) => {
+                Some((operator, loc)) => {
                     let right = self.multiplication();
                     let bin_op = match operator {
                         TokenType::Minus => BinaryOperator::Minus,
                         TokenType::Plus => BinaryOperator::Plus,
                         _ => unreachable!(),
                     };
-                    expr = Expr::Binary(Box::new(expr), bin_op, Box::new(right));
+                    expr = Expr::Binary(Box::new(expr), bin_op, Box::new(right), loc);
                 }
             }
         }
@@ -98,14 +98,14 @@ impl <'a> Parser<'a> {
         loop {
             match self.matches(&vec![TokenType::Slash, TokenType::Star]) {
                 None => break,
-                Some(operator) => {
+                Some((operator, loc)) => {
                     let right = self.unary();
                     let bin_op = match operator {
                         TokenType::Slash => BinaryOperator::Divide,
                         TokenType::Star => BinaryOperator::Multiply,
                         _ => unreachable!(),
                     };
-                    expr = Expr::Binary(Box::new(expr), bin_op, Box::new(right));
+                    expr = Expr::Binary(Box::new(expr), bin_op, Box::new(right), loc);
                 }
             }
         }
@@ -116,7 +116,7 @@ impl <'a> Parser<'a> {
     fn unary(&mut self) -> Expr {
         match self.matches(&vec![TokenType::Bang, TokenType::Minus]) {
             None => self.primary(),
-            Some(operator) => {
+            Some((operator, loc)) => {
                 let right = self.unary();
 
                 let unary_op = match operator {
@@ -124,7 +124,7 @@ impl <'a> Parser<'a> {
                     TokenType::Minus => UnaryOperator::Minus,
                     _ => unreachable!(),
                 };
-                Expr::Unary(unary_op, Box::new(right))
+                Expr::Unary(unary_op, Box::new(right), loc)
             }
         }
     }
@@ -182,12 +182,14 @@ impl <'a> Parser<'a> {
         expr
     }
 
-    fn matches(&mut self, token_types: &[TokenType]) -> Option<TokenType> {
+    fn matches(&mut self, token_types: &[TokenType]) -> Option<(TokenType, SourceLoc)> {
         let token_type: Option<_> = match self.peek() {
             None => None,
             Some(token) => {
                 if token_types.contains(&token.token_type) {
-                    Some(token.token_type)
+                    let loc = SourceLoc::new(token.line);
+
+                    Some((token.token_type, loc))
                 }
                 else {
                     None
@@ -246,13 +248,18 @@ mod tests {
     fn test_parse_binary_op() {
         assert_eq!(parse_string("40 + 2"), Binary(Box::new(LiteralNumber(40.0)),
                                                   BinaryOperator::Plus,
-                                                  Box::new(LiteralNumber(2.0))));
+                                                  Box::new(LiteralNumber(2.0)),
+                                                  SourceLoc::new(1)));
     }
 
     #[test]
     fn test_parse_unary_op() {
-        assert_eq!(parse_string("-42"), Unary(UnaryOperator::Minus, Box::new(LiteralNumber(42.0))));
-        assert_eq!(parse_string("!true"), Unary(UnaryOperator::Not, Box::new(LiteralBool(true))));
+        assert_eq!(parse_string("-42"), Unary(UnaryOperator::Minus,
+                                              Box::new(LiteralNumber(42.0)),
+                                              SourceLoc::new(1)));
+        assert_eq!(parse_string("!true"), Unary(UnaryOperator::Not,
+                                                Box::new(LiteralBool(true)),
+                                                SourceLoc::new(1)));
     }
 
     #[test]
@@ -270,6 +277,8 @@ mod tests {
                                BinaryOperator::Equal,
                                Box::new(Binary(Box::new(LiteralNumber(40.0)),
                                                BinaryOperator::Plus,
-                                               Box::new(LiteralNumber(2.0))))));
+                                               Box::new(LiteralNumber(2.0)),
+                                               SourceLoc::new(1))),
+                               SourceLoc::new(1)));
     }
 }

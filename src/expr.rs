@@ -1,12 +1,12 @@
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
-    Binary(Box<Expr>, BinaryOperator, Box<Expr>),
+    Binary(Box<Expr>, BinaryOperator, Box<Expr>, SourceLoc),
     Grouping(Box<Expr>),
     LiteralBool(bool),
     LiteralNumber(f64),
     LiteralNil,
     LiteralString(String),
-    Unary(UnaryOperator, Box<Expr>),
+    Unary(UnaryOperator, Box<Expr>, SourceLoc),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -28,4 +28,17 @@ pub enum BinaryOperator {
     LessEqual,
     Greater,
     GreaterEqual,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct SourceLoc {
+    pub line: usize,
+}
+
+impl SourceLoc {
+    pub fn new(line: usize) -> SourceLoc {
+        SourceLoc {
+            line,
+        }
+    }
 }

@@ -1,4 +1,5 @@
 use std::fmt;
+use expr::SourceLoc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
@@ -70,13 +71,16 @@ impl fmt::Display for RuntimeType {
     }
 }
 
+#[derive(Clone, Debug)]
 pub struct RuntimeError {
+    pub source_loc: SourceLoc,
     pub message: String,
 }
 
 impl RuntimeError {
-    pub fn new(message: &str) -> RuntimeError {
+    pub fn new(source_loc: SourceLoc, message: &str) -> RuntimeError {
         RuntimeError {
+            source_loc,
             message: message.into(),
         }
     }
