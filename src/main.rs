@@ -74,5 +74,12 @@ fn run(source: String) {
     let ast = parser.parse();
     let mut interpreter = Interpreter::new();
     let result = interpreter.evaluate(&ast);
-    println!("{:?}", result);
+    match result {
+        Ok(value) => {
+            println!("{:?}", value);
+        }
+        Err(e) => {
+            println!("{}", e.message);
+        }
+    }
 }
