@@ -225,28 +225,20 @@ mod tests {
     use super::*;
     use expr::Expr::*;
     use scanner::*;
-
-    fn parse_string(s: &str) -> Expr {
-        let mut scanner = Scanner::new(s);
-        let tokens = scanner.scan_tokens();
-        let mut parser = Parser::new(tokens);
-        let ast = parser.parse();
-
-        ast
-    }
+    use util::parse;
 
     #[test]
     fn test_parse_literal() {
-        assert_eq!(parse_string("42"), LiteralNumber(42.0));
-        assert_eq!(parse_string("\"hello\""), LiteralString("hello".to_string()));
-        assert_eq!(parse_string("true"), LiteralBool(true));
-        assert_eq!(parse_string("false"), LiteralBool(false));
-        assert_eq!(parse_string("nil"), LiteralNil);
+        assert_eq!(parse("42"), LiteralNumber(42.0));
+        assert_eq!(parse("\"hello\""), LiteralString("hello".to_string()));
+        assert_eq!(parse("true"), LiteralBool(true));
+        assert_eq!(parse("false"), LiteralBool(false));
+        assert_eq!(parse("nil"), LiteralNil);
     }
 
     #[test]
     fn test_parse_binary_op() {
-        assert_eq!(parse_string("40 + 2"), Binary(Box::new(LiteralNumber(40.0)),
+        assert_eq!(parse("40 + 2"), Binary(Box::new(LiteralNumber(40.0)),
                                                   BinaryOperator::Plus,
                                                   Box::new(LiteralNumber(2.0)),
                                                   SourceLoc::new(1)));
@@ -254,17 +246,17 @@ mod tests {
 
     #[test]
     fn test_parse_unary_op() {
-        assert_eq!(parse_string("-42"), Unary(UnaryOperator::Minus,
+        assert_eq!(parse("-42"), Unary(UnaryOperator::Minus,
                                               Box::new(LiteralNumber(42.0)),
                                               SourceLoc::new(1)));
-        assert_eq!(parse_string("!true"), Unary(UnaryOperator::Not,
+        assert_eq!(parse("!true"), Unary(UnaryOperator::Not,
                                                 Box::new(LiteralBool(true)),
                                                 SourceLoc::new(1)));
     }
 
     #[test]
     fn test_parse_grouping() {
-        assert_eq!(parse_string("(40)"), Grouping(Box::new(LiteralNumber(40.0))));
+        assert_eq!(parse("(40)"), Grouping(Box::new(LiteralNumber(40.0))));
     }
 
     #[test]
