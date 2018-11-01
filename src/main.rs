@@ -46,6 +46,7 @@ fn print_usage() {
 
 fn run_repl() {
     let stdin = io::stdin();
+    let mut interpreter = Interpreter::new();
     loop {
         print!("> ");
         io::stdout().flush().expect("run_repl: unable to flush stdout");
@@ -53,7 +54,7 @@ fn run_repl() {
         let mut input = String::new();
         match stdin.lock().read_line(&mut input) {
             Ok(_) => {
-                let result = run(input);
+                let result = run(&mut interpreter, input);
                 print_result(&result);
             }
             Err(error) => {
@@ -69,18 +70,18 @@ fn run_file(file_path: &str) -> bool {
     let mut contents = String::new();
     file.read_to_string(&mut contents).expect(&format!("unable to read file: {}", file_path));
 
-    let result = run(contents);
+    let mut interpreter = Interpreter::new();
+    let result = run(&mut interpreter, contents);
     print_result(&result);
 
     result.is_err()
 }
 
-fn run(source: String) -> Result<Value, RuntimeError> {
+fn run(interpreter: &mut Interpreter, source: String) -> Result<Value, RuntimeError> {
     let mut scanner = Scanner::new(&source);
     let tokens = scanner.scan_tokens();
     let mut parser = Parser::new(tokens);
     let ast = parser.parse();
-    let mut interpreter = Interpreter::new();
     let result = interpreter.evaluate(&ast);
 
     result
