@@ -71,7 +71,7 @@ impl fmt::Display for RuntimeType {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuntimeError {
     pub source_loc: SourceLoc,
     pub message: String,

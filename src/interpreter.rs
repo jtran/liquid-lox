@@ -100,3 +100,53 @@ impl Interpreter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use value::Value::*;
+    use util::parse;
+
+    fn eval(code: &str) -> Result<Value, RuntimeError> {
+        let mut interpreter = Interpreter::new();
+
+        interpreter.evaluate(&parse(code))
+    }
+
+    #[test]
+    fn test_eval_literals() {
+        assert_eq!(eval("42"), Ok(NumberVal(42.0)));
+        assert_eq!(eval("\"hello\""), Ok(StringVal("hello".to_string())));
+        assert_eq!(eval("true"), Ok(BoolVal(true)));
+        assert_eq!(eval("false"), Ok(BoolVal(false)));
+        assert_eq!(eval("nil"), Ok(NilVal));
+    }
+
+    #[test]
+    fn test_eval_binary_ops() {
+        assert_eq!(eval("40 + 2"), Ok(NumberVal(42.0)));
+        assert_eq!(eval("\"foo\" + \"bar\""), Ok(StringVal("foobar".to_string())));
+        assert_eq!(eval("40 - 10"), Ok(NumberVal(30.0)));
+        assert_eq!(eval("7 * 3"), Ok(NumberVal(21.0)));
+        assert_eq!(eval("10 / 2"), Ok(NumberVal(5.0)));
+    }
+
+    #[test]
+    fn test_eval_comparison() {
+        assert_eq!(eval("true == true"), Ok(BoolVal(true)));
+        assert_eq!(eval("true == 32"), Ok(BoolVal(false)));
+        assert_eq!(eval("2 < 3"), Ok(BoolVal(true)));
+        assert_eq!(eval("2 > 3"), Ok(BoolVal(false)));
+    }
+
+    #[test]
+    fn test_eval_unary_ops() {
+        assert_eq!(eval("-6"), Ok(NumberVal(-6.0)));
+        assert_eq!(eval("! true"), Ok(BoolVal(false)));
+        assert_eq!(eval("! false"), Ok(BoolVal(true)));
+        assert_eq!(eval("! 1"), Ok(BoolVal(false)));
+        assert_eq!(eval("! 0"), Ok(BoolVal(false)));
+        assert_eq!(eval("! \"\""), Ok(BoolVal(false)));
+        assert_eq!(eval("! nil"), Ok(BoolVal(true)));
+    }
+}
