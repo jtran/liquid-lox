@@ -32,7 +32,12 @@ impl <'a> Parser<'a> {
                 None => break,
                 Some(operator) => {
                     let right = self.comparison();
-                    expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
+                    let bin_op = match operator {
+                        TokenType::BangEqual => BinaryOperator::NotEqual,
+                        TokenType::EqualEqual => BinaryOperator::Equal,
+                        _ => unreachable!(),
+                    };
+                    expr = Expr::Binary(Box::new(expr), bin_op, Box::new(right));
                 }
             }
         }
@@ -51,7 +56,14 @@ impl <'a> Parser<'a> {
                 None => break,
                 Some(operator) => {
                     let right = self.addition();
-                    expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
+                    let bin_op = match operator {
+                        TokenType::Less => BinaryOperator::Less,
+                        TokenType::LessEqual => BinaryOperator::LessEqual,
+                        TokenType::Greater => BinaryOperator::Greater,
+                        TokenType::GreaterEqual => BinaryOperator::GreaterEqual,
+                        _ => unreachable!(),
+                    };
+                    expr = Expr::Binary(Box::new(expr), bin_op, Box::new(right));
                 }
             }
         }
@@ -67,7 +79,12 @@ impl <'a> Parser<'a> {
                 None => break,
                 Some(operator) => {
                     let right = self.multiplication();
-                    expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
+                    let bin_op = match operator {
+                        TokenType::Minus => BinaryOperator::Minus,
+                        TokenType::Plus => BinaryOperator::Plus,
+                        _ => unreachable!(),
+                    };
+                    expr = Expr::Binary(Box::new(expr), bin_op, Box::new(right));
                 }
             }
         }
@@ -83,7 +100,12 @@ impl <'a> Parser<'a> {
                 None => break,
                 Some(operator) => {
                     let right = self.unary();
-                    expr = Expr::Binary(Box::new(expr), operator, Box::new(right));
+                    let bin_op = match operator {
+                        TokenType::Slash => BinaryOperator::Divide,
+                        TokenType::Star => BinaryOperator::Multiply,
+                        _ => unreachable!(),
+                    };
+                    expr = Expr::Binary(Box::new(expr), bin_op, Box::new(right));
                 }
             }
         }
@@ -97,7 +119,12 @@ impl <'a> Parser<'a> {
             Some(operator) => {
                 let right = self.unary();
 
-                Expr::Unary(operator, Box::new(right))
+                let unary_op = match operator {
+                    TokenType::Bang => UnaryOperator::Not,
+                    TokenType::Minus => UnaryOperator::Minus,
+                    _ => unreachable!(),
+                };
+                Expr::Unary(unary_op, Box::new(right))
             }
         }
     }
@@ -218,14 +245,14 @@ mod tests {
     #[test]
     fn test_parse_binary_op() {
         assert_eq!(parse_string("40 + 2"), Binary(Box::new(LiteralNumber(40.0)),
-                                                  TokenType::Plus,
+                                                  BinaryOperator::Plus,
                                                   Box::new(LiteralNumber(2.0))));
     }
 
     #[test]
     fn test_parse_unary_op() {
-        assert_eq!(parse_string("-42"), Unary(TokenType::Minus, Box::new(LiteralNumber(42.0))));
-        assert_eq!(parse_string("!true"), Unary(TokenType::Bang, Box::new(LiteralBool(true))));
+        assert_eq!(parse_string("-42"), Unary(UnaryOperator::Minus, Box::new(LiteralNumber(42.0))));
+        assert_eq!(parse_string("!true"), Unary(UnaryOperator::Not, Box::new(LiteralBool(true))));
     }
 
     #[test]
@@ -240,9 +267,9 @@ mod tests {
         let mut parser = Parser::new(tokens);
         let ast = parser.parse();
         assert_eq!(ast, Binary(Box::new(LiteralNumber(42.0)),
-                               TokenType::EqualEqual,
+                               BinaryOperator::Equal,
                                Box::new(Binary(Box::new(LiteralNumber(40.0)),
-                                               TokenType::Plus,
+                                               BinaryOperator::Plus,
                                                Box::new(LiteralNumber(2.0))))));
     }
 }
