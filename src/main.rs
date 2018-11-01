@@ -19,6 +19,7 @@ use std::process;
 use interpreter::*;
 use parser::*;
 use scanner::*;
+use value::*;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -28,7 +29,11 @@ fn main() {
         process::exit(1);
     }
     else if args.len() == 2 {
-        run_file(&args[1]);
+        let had_runtime_error = run_file(&args[1]);
+
+        if had_runtime_error {
+            process::exit(70);
+        }
     }
     else {
         run_repl();
@@ -49,7 +54,8 @@ fn run_repl() {
         let mut input = String::new();
         match read.read_line(&mut input) {
             Ok(_) => {
-                run(input);
+                let result = run(input);
+                print_result(&result);
             }
             Err(error) => {
                 println!("Error reading stdin: {:?}", error);
@@ -59,21 +65,29 @@ fn run_repl() {
     }
 }
 
-fn run_file(file_path: &str) {
+fn run_file(file_path: &str) -> bool {
     let mut file = File::open(file_path).expect(&format!("source file not found: {}", file_path));
     let mut contents = String::new();
     file.read_to_string(&mut contents).expect(&format!("unable to read file: {}", file_path));
 
-    run(contents)
+    let result = run(contents);
+    print_result(&result);
+
+    result.is_err()
 }
 
-fn run(source: String) {
+fn run(source: String) -> Result<Value, RuntimeError> {
     let mut scanner = Scanner::new(&source);
     let tokens = scanner.scan_tokens();
     let mut parser = Parser::new(tokens);
     let ast = parser.parse();
     let mut interpreter = Interpreter::new();
     let result = interpreter.evaluate(&ast);
+
+    result
+}
+
+fn print_result(result: &Result<Value, RuntimeError>) {
     match result {
         Ok(value) => {
             println!("{}", value);
