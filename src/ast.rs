@@ -1,7 +1,10 @@
+use source_loc::*;
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
     Expression(Expr),
     Print(Expr),
+    Var(String, Expr),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -12,6 +15,7 @@ pub enum Expr {
     LiteralNumber(f64),
     LiteralNil,
     LiteralString(String),
+    Variable(String, SourceLoc),
     Unary(UnaryOperator, Box<Expr>, SourceLoc),
 }
 
@@ -34,17 +38,4 @@ pub enum BinaryOperator {
     LessEqual,
     Greater,
     GreaterEqual,
-}
-
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct SourceLoc {
-    pub line: usize,
-}
-
-impl SourceLoc {
-    pub fn new(line: usize) -> SourceLoc {
-        SourceLoc {
-            line,
-        }
-    }
 }

@@ -1,5 +1,5 @@
 use ast::{Expr, Stmt};
-use parser::Parser;
+use parser::*;
 use scanner::Scanner;
 
 pub fn error(line: usize, message: &str) {
@@ -7,7 +7,7 @@ pub fn error(line: usize, message: &str) {
 }
 
 #[allow(dead_code)]
-pub fn parse(code: &str) -> Vec<Stmt> {
+pub fn parse(code: &str) -> Result<Vec<Stmt>, ParseError> {
     let mut scanner = Scanner::new(code);
     let tokens = scanner.scan_tokens();
     let mut parser = Parser::new(tokens);
@@ -17,7 +17,7 @@ pub fn parse(code: &str) -> Vec<Stmt> {
 }
 
 #[allow(dead_code)]
-pub fn parse_expression(code: &str) -> Expr {
+pub fn parse_expression(code: &str) -> Result<Expr, ParseError> {
     let mut scanner = Scanner::new(code);
     let tokens = scanner.scan_tokens();
     let mut parser = Parser::new(tokens);

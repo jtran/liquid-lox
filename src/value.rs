@@ -1,5 +1,7 @@
 use std::fmt;
-use ast::SourceLoc;
+
+use parser::ParseError;
+use source_loc::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
@@ -94,5 +96,11 @@ impl RuntimeError {
             source_loc,
             message: message.into(),
         }
+    }
+}
+
+impl From<ParseError> for RuntimeError {
+    fn from(err: ParseError) -> RuntimeError {
+        RuntimeError::new(err.source_loc(), &format!("parse error: {}", &err.message()))
     }
 }

@@ -1,6 +1,6 @@
 use ast::*;
+use source_loc::*;
 use token::*;
-use util;
 
 #[derive(Debug)]
 pub struct Parser<'a> {
@@ -16,57 +16,109 @@ impl <'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Vec<Stmt> {
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, ParseError> {
         let mut statements = Vec::new();
+        let mut errors = Vec::new();
         while ! self.is_at_end() {
-            statements.push(self.statement());
+            match self.declaration() {
+                Ok(statement) => {
+                    statements.push(statement);
+                }
+                Err(error) => {
+                    errors.push(error);
+                    // TODO: synchronize here.
+                }
+            }
         }
-        self.consume(TokenType::Eof, "Expected end of file");
+        let result = self.consume(TokenType::Eof, "Expected end of file");
+        if let Err(error) = result {
+            errors.push(error);
+        }
 
-        statements
+        if errors.is_empty() {
+            Ok(statements)
+        }
+        else {
+            Err(ParseError::new(errors))
+        }
     }
 
-    pub fn parse_expression(&mut self) -> Expr {
-        let expr = self.expression();
-        self.consume(TokenType::Eof, "Expected end of file");
+    pub fn parse_expression(&mut self) -> Result<Expr, ParseError> {
+        let expr = self.expression()?;
+        self.consume(TokenType::Eof, "Expected end of file")?;
 
-        expr
+        Ok(expr)
     }
 
-    fn statement(&mut self) -> Stmt {
+    fn declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
+        match self.matches(&vec![TokenType::Var]) {
+            None => self.statement(),
+            Some(_) => self.finish_var_declaration(),
+        }
+    }
+
+    fn finish_var_declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
+        // Consume the identifier.
+        let id = match self.peek() {
+            Some(token) => {
+                if token.token_type == TokenType::Identifier {
+                    token.lexeme
+                }
+                else {
+                    return Err(self.new_error("Expected identifier after \"var\""));
+                }
+            }
+            None => {
+                return Err(self.new_error("Expected identifier after \"var\""));
+            }
+        };
+        // Consume the identifier.
+        self.advance();
+
+        let expr = match self.matches(&vec![TokenType::Equal]) {
+            None => Expr::LiteralNil,
+            Some(_) => self.expression()?,
+        };
+
+        self.consume(TokenType::Semicolon, "Expected semicolon after var declaration")?;
+
+        Ok(Stmt::Var(id.to_string(), expr))
+    }
+
+    fn statement(&mut self) -> Result<Stmt, ParseErrorCause> {
         match self.matches(&vec![TokenType::Print]) {
             None => self.expression_statement(),
             Some(_) => self.finish_print_statement(),
         }
     }
 
-    fn finish_print_statement(&mut self) -> Stmt {
+    fn finish_print_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
         // The Print token has already been consumed.
-        let expr = self.expression();
-        self.consume(TokenType::Semicolon, "Expected semicolon after print value");
+        let expr = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expected semicolon after print value")?;
 
-        Stmt::Print(expr)
+        Ok(Stmt::Print(expr))
     }
 
-    fn expression_statement(&mut self) -> Stmt {
-        let expr = self.expression();
-        self.consume(TokenType::Semicolon, "Expected semicolon after expression");
+    fn expression_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
+        let expr = self.expression()?;
+        self.consume(TokenType::Semicolon, "Expected semicolon after expression")?;
 
-        Stmt::Expression(expr)
+        Ok(Stmt::Expression(expr))
     }
 
-    fn expression(&mut self) -> Expr {
+    fn expression(&mut self) -> Result<Expr, ParseErrorCause> {
         self.equality()
     }
 
-    fn equality(&mut self) -> Expr {
-        let mut expr = self.comparison();
+    fn equality(&mut self) -> Result<Expr, ParseErrorCause> {
+        let mut expr = self.comparison()?;
 
         loop {
             match self.matches(&vec![TokenType::BangEqual, TokenType::EqualEqual]) {
                 None => break,
                 Some((operator, loc)) => {
-                    let right = self.comparison();
+                    let right = self.comparison()?;
                     let bin_op = match operator {
                         TokenType::BangEqual => BinaryOperator::NotEqual,
                         TokenType::EqualEqual => BinaryOperator::Equal,
@@ -77,11 +129,11 @@ impl <'a> Parser<'a> {
             }
         }
 
-        expr
+        Ok(expr)
     }
 
-    fn comparison(&mut self) -> Expr {
-        let mut expr = self.addition();
+    fn comparison(&mut self) -> Result<Expr, ParseErrorCause> {
+        let mut expr = self.addition()?;
 
         loop {
             match self.matches(&vec![TokenType::Less,
@@ -90,7 +142,7 @@ impl <'a> Parser<'a> {
                                      TokenType::GreaterEqual]) {
                 None => break,
                 Some((operator, loc)) => {
-                    let right = self.addition();
+                    let right = self.addition()?;
                     let bin_op = match operator {
                         TokenType::Less => BinaryOperator::Less,
                         TokenType::LessEqual => BinaryOperator::LessEqual,
@@ -103,17 +155,17 @@ impl <'a> Parser<'a> {
             }
         }
 
-        expr
+        Ok(expr)
     }
 
-    fn addition(&mut self) -> Expr {
-        let mut expr = self.multiplication();
+    fn addition(&mut self) -> Result<Expr, ParseErrorCause> {
+        let mut expr = self.multiplication()?;
 
         loop {
             match self.matches(&vec![TokenType::Minus, TokenType::Plus]) {
                 None => break,
                 Some((operator, loc)) => {
-                    let right = self.multiplication();
+                    let right = self.multiplication()?;
                     let bin_op = match operator {
                         TokenType::Minus => BinaryOperator::Minus,
                         TokenType::Plus => BinaryOperator::Plus,
@@ -124,17 +176,17 @@ impl <'a> Parser<'a> {
             }
         }
 
-        expr
+        Ok(expr)
     }
 
-    fn multiplication(&mut self) -> Expr {
-        let mut expr = self.unary();
+    fn multiplication(&mut self) -> Result<Expr, ParseErrorCause> {
+        let mut expr = self.unary()?;
 
         loop {
             match self.matches(&vec![TokenType::Slash, TokenType::Star]) {
                 None => break,
                 Some((operator, loc)) => {
-                    let right = self.unary();
+                    let right = self.unary()?;
                     let bin_op = match operator {
                         TokenType::Slash => BinaryOperator::Divide,
                         TokenType::Star => BinaryOperator::Multiply,
@@ -145,29 +197,29 @@ impl <'a> Parser<'a> {
             }
         }
 
-        expr
+        Ok(expr)
     }
 
-    fn unary(&mut self) -> Expr {
+    fn unary(&mut self) -> Result<Expr, ParseErrorCause> {
         match self.matches(&vec![TokenType::Bang, TokenType::Minus]) {
             None => self.primary(),
             Some((operator, loc)) => {
-                let right = self.unary();
+                let right = self.unary()?;
 
                 let unary_op = match operator {
                     TokenType::Bang => UnaryOperator::Not,
                     TokenType::Minus => UnaryOperator::Minus,
                     _ => unreachable!(),
                 };
-                Expr::Unary(unary_op, Box::new(right), loc)
+                Ok(Expr::Unary(unary_op, Box::new(right), loc))
             }
         }
     }
 
-    fn primary(&mut self) -> Expr {
-        let (line, token_type) = match self.peek() {
+    fn primary(&mut self) -> Result<Expr, ParseErrorCause> {
+        let token_type = match self.peek() {
             None => panic!("primary: reached the end of the token stream unexpectedly"),
-            Some(token) => (token.line, token.token_type),
+            Some(token) => token.token_type,
         };
         let mut already_advanced = false;
 
@@ -178,29 +230,45 @@ impl <'a> Parser<'a> {
             TokenType::Number => {
                 match self.peek() {
                     None => panic!("primary: Number case: this shouldn't happen"),
-                    Some(token) => Expr::LiteralNumber(token.float_literal.expect("primary: expected float literal to include parsed float")),
+                    Some(token) => {
+                        let x = token.float_literal.expect("primary: expected float literal to include parsed float");
+
+                        Expr::LiteralNumber(x)
+                    }
                 }
             }
             TokenType::String => {
                 match self.peek() {
                     None => panic!("primary: String case: this shouldn't happen"),
-                    Some(token) => Expr::LiteralString(String::from(token.string_literal.expect("primary: expected float literal to include parsed string"))),
+                    Some(token) => {
+                        let s = token.string_literal.expect("primary: expected float literal to include parsed string");
+
+                        Expr::LiteralString(String::from(s))
+                    }
+                }
+            }
+            TokenType::Identifier => {
+                match self.peek() {
+                    None => panic!("primary: identifier case: this shouldn't happen"),
+                    Some(token) => {
+                        let loc = SourceLoc::new(token.line);
+
+                        Expr::Variable(token.lexeme.to_string(), loc)
+                    }
                 }
             }
             TokenType::LeftParen => {
                 self.advance();
                 already_advanced = true;
 
-                let expr = self.expression();
-                self.consume(TokenType::RightParen, "Missing close parenthesis");
+                let expr = self.expression()?;
+                self.consume(TokenType::RightParen, "Missing close parenthesis")?;
 
                 Expr::Grouping(Box::new(expr))
             }
             _ => {
-                util::error(line, &format!("Unexpected token: {:?}", token_type));
-
-                // TODO: What should we return here?
-                Expr::LiteralNil
+                self.advance();
+                return Err(self.new_error(&format!("Unexpected token: {:?}", token_type)));
             }
         };
 
@@ -208,7 +276,7 @@ impl <'a> Parser<'a> {
             self.advance();
         }
 
-        expr
+        Ok(expr)
     }
 
     fn matches(&mut self, token_types: &[TokenType]) -> Option<(TokenType, SourceLoc)> {
@@ -263,6 +331,14 @@ impl <'a> Parser<'a> {
         }
     }
 
+    fn peek_source_loc(&self) -> SourceLoc {
+        SourceLoc::new(self.peek_line())
+    }
+
+    fn new_error(&self, message: &str) -> ParseErrorCause {
+        ParseErrorCause::new(self.peek_source_loc(), message)
+    }
+
     fn is_at_end(&self) -> bool {
         match self.peek() {
             None => true,
@@ -270,14 +346,62 @@ impl <'a> Parser<'a> {
         }
     }
 
-    fn consume(&mut self, token_type: TokenType, error_message: &str) {
+    #[must_use]
+    fn consume(&mut self, token_type: TokenType, error_message: &str)
+        -> Result<(), ParseErrorCause>
+    {
         match self.matches(&vec![token_type]) {
-            Some(_) => (), // Expected.
-            None => {
-                util::error(self.peek_line(), error_message);
-                ()
-            }
-        };
+            Some(_) => Ok(()), // Expected.
+            None => Err(self.new_error(error_message)),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParseError {
+    causes: Vec<ParseErrorCause>,
+}
+
+impl ParseError {
+    pub fn new(causes: Vec<ParseErrorCause>) -> ParseError {
+        ParseError {
+            causes,
+        }
+    }
+
+    pub fn message(&self) -> String {
+        match self.causes.first() {
+            None => "unknown cause".to_string(),
+            Some(err) => err.message.to_string(),
+        }
+    }
+
+    pub fn source_loc(&self) -> SourceLoc {
+        match self.causes.first() {
+            None => SourceLoc::default(),
+            Some(err) => err.source_loc,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParseErrorCause {
+    pub source_loc: SourceLoc,
+    pub message: String,
+}
+
+impl ParseErrorCause {
+    pub fn new(source_loc: SourceLoc, message: &str) -> ParseErrorCause {
+        ParseErrorCause {
+            source_loc,
+            message: message.to_string(),
+        }
+    }
+}
+
+impl From<ParseErrorCause> for ParseError {
+    fn from(error: ParseErrorCause) -> ParseError {
+        ParseError { causes: vec![error] }
     }
 }
 
@@ -291,34 +415,34 @@ mod tests {
 
     #[test]
     fn test_parse_literal() {
-        assert_eq!(parse_expression("42"), LiteralNumber(42.0));
-        assert_eq!(parse_expression("\"hello\""), LiteralString("hello".to_string()));
-        assert_eq!(parse_expression("true"), LiteralBool(true));
-        assert_eq!(parse_expression("false"), LiteralBool(false));
-        assert_eq!(parse_expression("nil"), LiteralNil);
+        assert_eq!(parse_expression("42"), Ok(LiteralNumber(42.0)));
+        assert_eq!(parse_expression("\"hello\""), Ok(LiteralString("hello".to_string())));
+        assert_eq!(parse_expression("true"), Ok(LiteralBool(true)));
+        assert_eq!(parse_expression("false"), Ok(LiteralBool(false)));
+        assert_eq!(parse_expression("nil"), Ok(LiteralNil));
     }
 
     #[test]
     fn test_parse_binary_op() {
-        assert_eq!(parse_expression("40 + 2"), Binary(Box::new(LiteralNumber(40.0)),
-                                                      BinaryOperator::Plus,
-                                                      Box::new(LiteralNumber(2.0)),
-                                                      SourceLoc::new(1)));
+        assert_eq!(parse_expression("40 + 2"), Ok(Binary(Box::new(LiteralNumber(40.0)),
+                                                         BinaryOperator::Plus,
+                                                         Box::new(LiteralNumber(2.0)),
+                                                         SourceLoc::new(1))));
     }
 
     #[test]
     fn test_parse_unary_op() {
-        assert_eq!(parse_expression("-42"), Unary(UnaryOperator::Minus,
-                                                  Box::new(LiteralNumber(42.0)),
-                                                  SourceLoc::new(1)));
-        assert_eq!(parse_expression("!true"), Unary(UnaryOperator::Not,
-                                                    Box::new(LiteralBool(true)),
-                                                    SourceLoc::new(1)));
+        assert_eq!(parse_expression("-42"), Ok(Unary(UnaryOperator::Minus,
+                                                     Box::new(LiteralNumber(42.0)),
+                                                     SourceLoc::new(1))));
+        assert_eq!(parse_expression("!true"), Ok(Unary(UnaryOperator::Not,
+                                                       Box::new(LiteralBool(true)),
+                                                       SourceLoc::new(1))));
     }
 
     #[test]
     fn test_parse_grouping() {
-        assert_eq!(parse_expression("(40)"), Grouping(Box::new(LiteralNumber(40.0))));
+        assert_eq!(parse_expression("(40)"), Ok(Grouping(Box::new(LiteralNumber(40.0)))));
     }
 
     #[test]
@@ -327,17 +451,26 @@ mod tests {
         let tokens = scanner.scan_tokens();
         let mut parser = Parser::new(tokens);
         let ast = parser.expression();
-        assert_eq!(ast, Binary(Box::new(LiteralNumber(42.0)),
-                               BinaryOperator::Equal,
-                               Box::new(Binary(Box::new(LiteralNumber(40.0)),
-                                               BinaryOperator::Plus,
-                                               Box::new(LiteralNumber(2.0)),
-                                               SourceLoc::new(1))),
-                               SourceLoc::new(1)));
+        assert_eq!(ast, Ok(Binary(Box::new(LiteralNumber(42.0)),
+                                  BinaryOperator::Equal,
+                                  Box::new(Binary(Box::new(LiteralNumber(40.0)),
+                                                  BinaryOperator::Plus,
+                                                  Box::new(LiteralNumber(2.0)),
+                                                  SourceLoc::new(1))),
+                                  SourceLoc::new(1))));
+    }
+
+    #[test]
+    fn test_parse_invalid() {
+        let causes = vec![
+            ParseErrorCause::new(SourceLoc::new(1), "Unexpected token: And"),
+            ParseErrorCause::new(SourceLoc::new(1), "Unexpected token: Semicolon"),
+        ];
+        assert_eq!(parse("and;"), Err(ParseError::new(causes)));
     }
 
     #[test]
     fn test_parse_statements() {
-        assert_eq!(parse("print \"one\";"), vec![Stmt::Print(LiteralString("one".into()))]);
+        assert_eq!(parse("print \"one\";"), Ok(vec![Stmt::Print(LiteralString("one".into()))]));
     }
 }

@@ -3,9 +3,11 @@ extern crate lazy_static;
 extern crate unicode_segmentation;
 
 mod ast;
+mod environment;
 mod interpreter;
 mod parser;
 mod scanner;
+mod source_loc;
 mod token;
 mod util;
 mod value;
@@ -81,7 +83,8 @@ fn run(interpreter: &mut Interpreter, source: String) -> Result<Value, RuntimeEr
     let mut scanner = Scanner::new(&source);
     let tokens = scanner.scan_tokens();
     let mut parser = Parser::new(tokens);
-    let ast = parser.parse();
+    // If there's a parse error, it's converted to a runtime error here.
+    let ast = parser.parse()?;
     let result = interpreter.interpret(ast);
 
     result
@@ -95,6 +98,7 @@ fn print_result(result: &Result<Value, RuntimeError>, print_success: bool) {
             }
         }
         Err(e) => {
+            // TODO: Treat parse error differently and print all causes.
             util::error(e.source_loc.line, &e.message);
         }
     }

@@ -1,12 +1,16 @@
 use ast::*;
+use environment::*;
 use value::*;
 
 pub struct Interpreter {
+    env: Environment,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        Interpreter {}
+        Interpreter {
+            env: Default::default(),
+        }
     }
 
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<Value, RuntimeError> {
@@ -24,6 +28,12 @@ impl Interpreter {
             Stmt::Print(expr) => {
                 let value = self.evaluate(expr)?;
                 println!("{}", value.to_runtime_string());
+
+                Ok(Value::NilVal)
+            }
+            Stmt::Var(identifier, expr) => {
+                let value = self.evaluate(expr)?;
+                self.env.define(identifier, value);
 
                 Ok(Value::NilVal)
             }
@@ -111,6 +121,15 @@ impl Interpreter {
             Expr::LiteralNil => Ok(NilVal),
             Expr::LiteralNumber(x) => Ok(NumberVal(*x)),
             Expr::LiteralString(s) => Ok(StringVal(s.clone())),
+            Expr::Variable(id, loc) => {
+                self.env.get(id)
+                    // TODO: Don't clone here since it copies strings.  We only
+                    // have a reference to the value, though.
+                    .map(|value| value.clone())
+                    // In the case that the variable is not in the environment,
+                    // generate a runtime error.
+                    .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined variable: {}", id)))
+            }
             Expr::Unary(op, e, loc) => {
                 let v = self.evaluate(e)?;
                 let right_type = v.runtime_type();
@@ -132,6 +151,7 @@ impl Interpreter {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use source_loc::*;
     use value::Value::*;
     use util::parse;
     use util::parse_expression;
@@ -139,13 +159,13 @@ mod tests {
     fn interpret(code: &str) -> Result<Value, RuntimeError> {
         let mut interpreter = Interpreter::new();
 
-        interpreter.interpret(parse(code))
+        interpreter.interpret(parse(code)?)
     }
 
     fn eval(code: &str) -> Result<Value, RuntimeError> {
         let mut interpreter = Interpreter::new();
 
-        interpreter.evaluate(&parse_expression(code))
+        interpreter.evaluate(&parse_expression(code)?)
     }
 
     #[test]
@@ -206,5 +226,17 @@ mod tests {
     #[test]
     fn test_interpret_print() {
         assert_eq!(interpret("print \"print test\";"), Ok(NilVal));
+    }
+
+    #[test]
+    fn test_interpret_var() {
+        assert_eq!(interpret("var x;"), Ok(NilVal));
+        assert_eq!(interpret("var x = 1;"), Ok(NilVal));
+    }
+
+    #[test]
+    fn test_interpret_var_use() {
+        assert_eq!(interpret("var x = 1; x;"), Ok(NumberVal(1.0)));
+        assert_eq!(interpret("x;"), Err(RuntimeError::new(SourceLoc::new(1), "Undefined variable: x")));
     }
 }
