@@ -1,5 +1,5 @@
+use ast::*;
 use token::*;
-use expr::*;
 use util;
 
 #[derive(Debug)]
@@ -16,8 +16,43 @@ impl <'a> Parser<'a> {
         }
     }
 
-    pub fn parse(&mut self) -> Expr {
-        self.expression()
+    pub fn parse(&mut self) -> Vec<Stmt> {
+        let mut statements = Vec::new();
+        while ! self.is_at_end() {
+            statements.push(self.statement());
+        }
+        self.consume(TokenType::Eof, "Expected end of file");
+
+        statements
+    }
+
+    pub fn parse_expression(&mut self) -> Expr {
+        let expr = self.expression();
+        self.consume(TokenType::Eof, "Expected end of file");
+
+        expr
+    }
+
+    fn statement(&mut self) -> Stmt {
+        match self.matches(&vec![TokenType::Print]) {
+            None => self.expression_statement(),
+            Some(_) => self.finish_print_statement(),
+        }
+    }
+
+    fn finish_print_statement(&mut self) -> Stmt {
+        // The Print token has already been consumed.
+        let expr = self.expression();
+        self.consume(TokenType::Semicolon, "Expected semicolon after print value");
+
+        Stmt::Print(expr)
+    }
+
+    fn expression_statement(&mut self) -> Stmt {
+        let expr = self.expression();
+        self.consume(TokenType::Semicolon, "Expected semicolon after expression");
+
+        Stmt::Expression(expr)
     }
 
     fn expression(&mut self) -> Expr {
@@ -157,13 +192,7 @@ impl <'a> Parser<'a> {
                 already_advanced = true;
 
                 let expr = self.expression();
-                match self.matches(&vec![TokenType::RightParen]) {
-                    Some(_) => (), // Expected.
-                    None => {
-                        util::error(line, "Missing close parenthesis");
-                        ()
-                    }
-                };
+                self.consume(TokenType::RightParen, "Missing close parenthesis");
 
                 Expr::Grouping(Box::new(expr))
             }
@@ -215,48 +244,81 @@ impl <'a> Parser<'a> {
         self.tokens.get(self.current)
     }
 
+    fn previous(&self) -> Option<&Token<'a>> {
+        self.tokens.get(self.current - 1)
+    }
+
+    fn peek_line(&self) -> usize {
+        match self.peek() {
+            Some(token) => token.line,
+            None => {
+                // We're at the end of file, so use the line of the last token.
+                match self.previous() {
+                    Some(token) => token.line,
+                    // If there was no last token, this is an edge case where
+                    // there were no tokens.
+                    None => 1,
+                }
+            }
+        }
+    }
+
     fn is_at_end(&self) -> bool {
-        self.current >= self.tokens.len()
+        match self.peek() {
+            None => true,
+            Some(token) => token.token_type == TokenType::Eof,
+        }
+    }
+
+    fn consume(&mut self, token_type: TokenType, error_message: &str) {
+        match self.matches(&vec![token_type]) {
+            Some(_) => (), // Expected.
+            None => {
+                util::error(self.peek_line(), error_message);
+                ()
+            }
+        };
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use expr::Expr::*;
+    use ast::Expr::*;
     use scanner::*;
     use util::parse;
+    use util::parse_expression;
 
     #[test]
     fn test_parse_literal() {
-        assert_eq!(parse("42"), LiteralNumber(42.0));
-        assert_eq!(parse("\"hello\""), LiteralString("hello".to_string()));
-        assert_eq!(parse("true"), LiteralBool(true));
-        assert_eq!(parse("false"), LiteralBool(false));
-        assert_eq!(parse("nil"), LiteralNil);
+        assert_eq!(parse_expression("42"), LiteralNumber(42.0));
+        assert_eq!(parse_expression("\"hello\""), LiteralString("hello".to_string()));
+        assert_eq!(parse_expression("true"), LiteralBool(true));
+        assert_eq!(parse_expression("false"), LiteralBool(false));
+        assert_eq!(parse_expression("nil"), LiteralNil);
     }
 
     #[test]
     fn test_parse_binary_op() {
-        assert_eq!(parse("40 + 2"), Binary(Box::new(LiteralNumber(40.0)),
-                                                  BinaryOperator::Plus,
-                                                  Box::new(LiteralNumber(2.0)),
-                                                  SourceLoc::new(1)));
+        assert_eq!(parse_expression("40 + 2"), Binary(Box::new(LiteralNumber(40.0)),
+                                                      BinaryOperator::Plus,
+                                                      Box::new(LiteralNumber(2.0)),
+                                                      SourceLoc::new(1)));
     }
 
     #[test]
     fn test_parse_unary_op() {
-        assert_eq!(parse("-42"), Unary(UnaryOperator::Minus,
-                                              Box::new(LiteralNumber(42.0)),
-                                              SourceLoc::new(1)));
-        assert_eq!(parse("!true"), Unary(UnaryOperator::Not,
-                                                Box::new(LiteralBool(true)),
-                                                SourceLoc::new(1)));
+        assert_eq!(parse_expression("-42"), Unary(UnaryOperator::Minus,
+                                                  Box::new(LiteralNumber(42.0)),
+                                                  SourceLoc::new(1)));
+        assert_eq!(parse_expression("!true"), Unary(UnaryOperator::Not,
+                                                    Box::new(LiteralBool(true)),
+                                                    SourceLoc::new(1)));
     }
 
     #[test]
     fn test_parse_grouping() {
-        assert_eq!(parse("(40)"), Grouping(Box::new(LiteralNumber(40.0))));
+        assert_eq!(parse_expression("(40)"), Grouping(Box::new(LiteralNumber(40.0))));
     }
 
     #[test]
@@ -264,7 +326,7 @@ mod tests {
         let mut scanner = Scanner::new("42 == 40 + 2");
         let tokens = scanner.scan_tokens();
         let mut parser = Parser::new(tokens);
-        let ast = parser.parse();
+        let ast = parser.expression();
         assert_eq!(ast, Binary(Box::new(LiteralNumber(42.0)),
                                BinaryOperator::Equal,
                                Box::new(Binary(Box::new(LiteralNumber(40.0)),
@@ -272,5 +334,10 @@ mod tests {
                                                Box::new(LiteralNumber(2.0)),
                                                SourceLoc::new(1))),
                                SourceLoc::new(1)));
+    }
+
+    #[test]
+    fn test_parse_statements() {
+        assert_eq!(parse("print \"one\";"), vec![Stmt::Print(LiteralString("one".into()))]);
     }
 }

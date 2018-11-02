@@ -1,5 +1,5 @@
 use std::fmt;
-use expr::SourceLoc;
+use ast::SourceLoc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
@@ -46,12 +46,23 @@ impl Value {
             StringVal(_) => RuntimeType::StringType,
         }
     }
+
+    pub fn to_runtime_string(&self) -> String {
+        match self {
+            BoolVal(true) => "true".into(),
+            BoolVal(false) => "false".into(),
+            NilVal => "nil".into(),
+            NumberVal(x) => format!("{}", x),
+            StringVal(s) => s.clone(),
+        }
+    }
 }
 
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            BoolVal(b) => write!(f, "{}", b),
+            BoolVal(false) => write!(f, "false"),
+            BoolVal(true) => write!(f, "true"),
             NilVal => write!(f, "nil"),
             NumberVal(x) => write!(f, "{}", x),
             StringVal(s) => write!(f, "\"{}\"", s),

@@ -1,4 +1,4 @@
-use expr::*;
+use ast::*;
 use value::*;
 
 pub struct Interpreter {
@@ -7,6 +7,27 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new() -> Interpreter {
         Interpreter {}
+    }
+
+    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<Value, RuntimeError> {
+        let mut result = Value::NilVal;
+        for stmt in statements.iter() {
+            result = self.execute(stmt)?;
+        }
+
+        Ok(result)
+    }
+
+    pub fn execute(&mut self, statement: &Stmt) -> Result<Value, RuntimeError> {
+        match statement {
+            Stmt::Expression(expr) => self.evaluate(expr),
+            Stmt::Print(expr) => {
+                let value = self.evaluate(expr)?;
+                println!("{}", value.to_runtime_string());
+
+                Ok(Value::NilVal)
+            }
+        }
     }
 
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
@@ -113,11 +134,18 @@ mod tests {
     use super::*;
     use value::Value::*;
     use util::parse;
+    use util::parse_expression;
+
+    fn interpret(code: &str) -> Result<Value, RuntimeError> {
+        let mut interpreter = Interpreter::new();
+
+        interpreter.interpret(parse(code))
+    }
 
     fn eval(code: &str) -> Result<Value, RuntimeError> {
         let mut interpreter = Interpreter::new();
 
-        interpreter.evaluate(&parse(code))
+        interpreter.evaluate(&parse_expression(code))
     }
 
     #[test]
@@ -161,5 +189,22 @@ mod tests {
         assert_eq!(eval("! 0"), Ok(BoolVal(false)));
         assert_eq!(eval("! \"\""), Ok(BoolVal(false)));
         assert_eq!(eval("! nil"), Ok(BoolVal(true)));
+    }
+
+    #[test]
+    fn test_interpret_literals() {
+        assert_eq!(interpret("42;"), Ok(NumberVal(42.0)));
+        assert_eq!(interpret("nil;"), Ok(NilVal));
+    }
+
+    #[test]
+    fn test_interpret_operators() {
+        assert_eq!(interpret("40 + 2;"), Ok(NumberVal(42.0)));
+        assert_eq!(interpret("\"foo\" + \"bar\";"), Ok(StringVal("foobar".into())));
+    }
+
+    #[test]
+    fn test_interpret_print() {
+        assert_eq!(interpret("print \"print test\";"), Ok(NilVal));
     }
 }

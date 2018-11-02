@@ -1,4 +1,10 @@
 #[derive(Clone, Debug, PartialEq)]
+pub enum Stmt {
+    Expression(Expr),
+    Print(Expr),
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Binary(Box<Expr>, BinaryOperator, Box<Expr>, SourceLoc),
     Grouping(Box<Expr>),

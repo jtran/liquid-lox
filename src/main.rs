@@ -2,7 +2,7 @@
 extern crate lazy_static;
 extern crate unicode_segmentation;
 
-mod expr;
+mod ast;
 mod interpreter;
 mod parser;
 mod scanner;
@@ -55,7 +55,7 @@ fn run_repl() {
         match stdin.lock().read_line(&mut input) {
             Ok(_) => {
                 let result = run(&mut interpreter, input);
-                print_result(&result);
+                print_result(&result, true);
             }
             Err(error) => {
                 println!("Error reading stdin: {:?}", error);
@@ -72,7 +72,7 @@ fn run_file(file_path: &str) -> bool {
 
     let mut interpreter = Interpreter::new();
     let result = run(&mut interpreter, contents);
-    print_result(&result);
+    print_result(&result, false);
 
     result.is_err()
 }
@@ -82,15 +82,17 @@ fn run(interpreter: &mut Interpreter, source: String) -> Result<Value, RuntimeEr
     let tokens = scanner.scan_tokens();
     let mut parser = Parser::new(tokens);
     let ast = parser.parse();
-    let result = interpreter.evaluate(&ast);
+    let result = interpreter.interpret(ast);
 
     result
 }
 
-fn print_result(result: &Result<Value, RuntimeError>) {
+fn print_result(result: &Result<Value, RuntimeError>, print_success: bool) {
     match result {
         Ok(value) => {
-            println!("{}", value);
+            if print_success {
+                println!("{}", value);
+            }
         }
         Err(e) => {
             util::error(e.source_loc.line, &e.message);
