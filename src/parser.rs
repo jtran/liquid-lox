@@ -193,7 +193,7 @@ impl <'a> Parser<'a> {
     }
 
     fn assignment(&mut self) -> Result<Expr, ParseErrorCause> {
-        let expr = self.equality()?;
+        let expr = self.or()?;
 
         match self.matches(&vec![TokenType::Equal]) {
             None => Ok(expr), // Not actually an assignment at all.
@@ -209,6 +209,28 @@ impl <'a> Parser<'a> {
                 Ok(Expr::Assign(id, Box::new(right_expr), loc))
             }
         }
+    }
+
+    fn or(&mut self) -> Result<Expr, ParseErrorCause> {
+        let mut expr = self.and()?;
+
+        while self.match_token(TokenType::Or) {
+            let right_expr = self.and()?;
+            expr = Expr::Logical(Box::new(expr), LogicalOperator::Or, Box::new(right_expr));
+        }
+
+        Ok(expr)
+    }
+
+    fn and(&mut self) -> Result<Expr, ParseErrorCause> {
+        let mut expr = self.equality()?;
+
+        while self.match_token(TokenType::And) {
+            let right_expr = self.equality()?;
+            expr = Expr::Logical(Box::new(expr), LogicalOperator::And, Box::new(right_expr));
+        }
+
+        Ok(expr)
     }
 
     fn equality(&mut self) -> Result<Expr, ParseErrorCause> {

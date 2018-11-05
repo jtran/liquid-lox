@@ -167,6 +167,24 @@ impl Interpreter {
             Expr::LiteralNil => Ok(NilVal),
             Expr::LiteralNumber(x) => Ok(NumberVal(*x)),
             Expr::LiteralString(s) => Ok(StringVal(s.clone())),
+            Expr::Logical(left, LogicalOperator::And, right) => {
+                let left_val = self.evaluate(left)?;
+                if left_val.is_truthy() {
+                    self.evaluate(right)
+                }
+                else {
+                    Ok(left_val)
+                }
+            }
+            Expr::Logical(left, LogicalOperator::Or, right) => {
+                let left_val = self.evaluate(left)?;
+                if left_val.is_truthy() {
+                    Ok(left_val)
+                }
+                else {
+                    self.evaluate(right)
+                }
+            }
             Expr::Variable(id, loc) => {
                 self.env.get(id)
                     // TODO: Don't clone here since it copies strings.  We only
@@ -323,5 +341,14 @@ mod tests {
         assert_eq!(interpret("var x = 1; if (0 > 1) { x = 2; } else { x = 3; } x;"), Ok(NumberVal(3.0)));
         // Dangling else ambiguity.
         assert_eq!(interpret("var x = 1; if (true) if (false) x = 2; else x = 3; x;"), Ok(NumberVal(3.0)));
+    }
+
+    #[test]
+    fn test_interpret_and_or() {
+        // TODO: test short-circuiting.
+        assert_eq!(interpret("1 and 2;"), Ok(NumberVal(2.0)));
+        assert_eq!(interpret("false and 2;"), Ok(BoolVal(false)));
+        assert_eq!(interpret("1 or 2;"), Ok(NumberVal(1.0)));
+        assert_eq!(interpret("nil or 2;"), Ok(NumberVal(2.0)));
     }
 }

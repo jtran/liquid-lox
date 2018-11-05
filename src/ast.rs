@@ -18,6 +18,7 @@ pub enum Expr {
     LiteralNumber(f64),
     LiteralNil,
     LiteralString(String),
+    Logical(Box<Expr>, LogicalOperator, Box<Expr>),
     Variable(String, SourceLoc),
     Unary(UnaryOperator, Box<Expr>, SourceLoc),
 }
@@ -41,4 +42,10 @@ pub enum BinaryOperator {
     LessEqual,
     Greater,
     GreaterEqual,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum LogicalOperator {
+    And,
+    Or,
 }
