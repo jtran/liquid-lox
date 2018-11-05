@@ -2,6 +2,7 @@ use source_loc::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
+    Block(Vec<Stmt>),
     Expression(Expr),
     Print(Expr),
     Var(String, Expr),

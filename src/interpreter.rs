@@ -1,15 +1,17 @@
+use std::mem;
+
 use ast::*;
 use environment::*;
 use value::*;
 
 pub struct Interpreter {
-    env: Environment,
+    env: Box<Environment>,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
         Interpreter {
-            env: Default::default(),
+            env: Box::new(Environment::default()),
         }
     }
 
@@ -24,6 +26,28 @@ impl Interpreter {
 
     pub fn execute(&mut self, statement: &Stmt) -> Result<Value, RuntimeError> {
         match statement {
+            Stmt::Block(statements) => {
+                // Create a new environment.
+                let mut env = Box::new(Environment::new(None));
+                let enclosing = mem::replace(&mut self.env, env);
+                self.env.enclosing = Some(enclosing);
+
+                // Execute statements.
+                let mut result = Ok(Value::NilVal);
+                for statement in statements {
+                    result = self.execute(statement);
+                    if result.is_err() {
+                        break;
+                    }
+                }
+
+                // Restore previous environment.
+                let enclosing = mem::replace(&mut self.env.enclosing, None)
+                                .expect("interpreter::execute: enclosing should never be empty here");
+                self.env = enclosing;
+
+                result
+            }
             Stmt::Expression(expr) => self.evaluate(expr),
             Stmt::Print(expr) => {
                 let value = self.evaluate(expr)?;
@@ -254,5 +278,14 @@ mod tests {
     fn test_interpret_var_assign() {
         assert_eq!(interpret("var x = 1; x = 2; x;"), Ok(NumberVal(2.0)));
         assert_eq!(interpret("x = 1;"), Err(RuntimeError::new(SourceLoc::new(1), "Undefined variable: x")));
+    }
+
+    #[test]
+    fn test_interpret_blocks() {
+        assert_eq!(interpret("var x = 1; { var x = 2; x; }"), Ok(NumberVal(2.0)));
+        assert_eq!(interpret("var x = 1; { var x = 2; } x;"), Ok(NumberVal(1.0)));
+        // Assignment.
+        assert_eq!(interpret("var x = 1; { var x = 2; x = 3; x; }"), Ok(NumberVal(3.0)));
+        assert_eq!(interpret("var x = 1; { var x = 2; x = 3; } x;"), Ok(NumberVal(1.0)));
     }
 }

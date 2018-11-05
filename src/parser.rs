@@ -86,10 +86,26 @@ impl <'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseErrorCause> {
-        match self.matches(&vec![TokenType::Print]) {
+        match self.matches(&vec![TokenType::LeftBrace, TokenType::Print]) {
             None => self.expression_statement(),
-            Some(_) => self.finish_print_statement(),
+            Some((TokenType::LeftBrace, _)) => {
+                self.finish_block().map(|statements| Stmt::Block(statements))
+            }
+            Some((TokenType::Print, _)) => self.finish_print_statement(),
+            Some((token_type, loc)) => panic!("statement: unexpected token type: {:?} loc={:?}", token_type, loc),
         }
+    }
+
+    fn finish_block(&mut self) -> Result<Vec<Stmt>, ParseErrorCause> {
+        let mut statements = Vec::new();
+
+        while ! self.check(TokenType::RightBrace) && ! self.is_at_end() {
+            statements.push(self.declaration()?);
+        }
+
+        self.consume(TokenType::RightBrace, "Expected right brace after block")?;
+
+        Ok(statements)
     }
 
     fn finish_print_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
@@ -296,6 +312,13 @@ impl <'a> Parser<'a> {
         }
 
         Ok(expr)
+    }
+
+    fn check(&self, token_type: TokenType) -> bool {
+        ! self.is_at_end() && match self.peek() {
+            None => false,
+            Some(token) => token.token_type == token_type,
+        }
     }
 
     fn matches(&mut self, token_types: &[TokenType]) -> Option<(TokenType, SourceLoc)> {
