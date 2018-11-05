@@ -49,6 +49,19 @@ impl Interpreter {
                 result
             }
             Stmt::Expression(expr) => self.evaluate(expr),
+            Stmt::If(condition, then_stmt, else_stmt) => {
+                let cond_value = self.evaluate(condition)?;
+
+                if cond_value.is_truthy() {
+                    self.execute(then_stmt)
+                }
+                else {
+                    match else_stmt {
+                        Some(stmt) => self.execute(stmt),
+                        None => Ok(Value::NilVal),
+                    }
+                }
+            },
             Stmt::Print(expr) => {
                 let value = self.evaluate(expr)?;
                 println!("{}", value.to_runtime_string());
@@ -301,5 +314,14 @@ mod tests {
         assert_eq!(interpret_repl_line("1 + 2"), Ok(NumberVal(3.0)));
         assert_eq!(interpret_repl_line("1 + 2;"), Ok(NumberVal(3.0)));
         assert_eq!(interpret_repl_line("1 + 2; 10"), Ok(NumberVal(10.0)));
+    }
+
+    #[test]
+    fn test_interpret_if() {
+        assert_eq!(interpret("var x = 1; if (0 < 1) x = 2; else x = 3; x;"), Ok(NumberVal(2.0)));
+        assert_eq!(interpret("var x = 1; if (0 > 1) x = 2; else x = 3; x;"), Ok(NumberVal(3.0)));
+        assert_eq!(interpret("var x = 1; if (0 > 1) { x = 2; } else { x = 3; } x;"), Ok(NumberVal(3.0)));
+        // Dangling else ambiguity.
+        assert_eq!(interpret("var x = 1; if (true) if (false) x = 2; else x = 3; x;"), Ok(NumberVal(3.0)));
     }
 }

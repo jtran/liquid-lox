@@ -125,14 +125,32 @@ impl <'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseErrorCause> {
-        match self.matches(&vec![TokenType::LeftBrace, TokenType::Print]) {
+        match self.matches(&vec![TokenType::If, TokenType::LeftBrace, TokenType::Print]) {
             None => self.expression_statement(),
+            Some((TokenType::If, _)) => self.finish_if_statement(),
             Some((TokenType::LeftBrace, _)) => {
                 self.finish_block().map(|statements| Stmt::Block(statements))
             }
             Some((TokenType::Print, _)) => self.finish_print_statement(),
             Some((token_type, loc)) => panic!("statement: unexpected token type: {:?} loc={:?}", token_type, loc),
         }
+    }
+
+    fn finish_if_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
+        self.consume(TokenType::LeftParen, "Expected left parenthesis after if")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expected right parenthesis after if condition")?;
+
+        let then_stmt = self.statement()?;
+
+        let else_stmt = if self.match_token(TokenType::Else) {
+            Some(Box::new(self.statement()?))
+        }
+        else {
+            None
+        };
+
+        Ok(Stmt::If(condition, Box::new(then_stmt), else_stmt))
     }
 
     fn finish_block(&mut self) -> Result<Vec<Stmt>, ParseErrorCause> {
@@ -366,6 +384,15 @@ impl <'a> Parser<'a> {
             None => false,
             Some(token) => token.token_type == token_type,
         }
+    }
+
+    fn match_token(&mut self, token_type: TokenType) -> bool {
+        let found = self.check(token_type);
+        if found {
+            self.advance();
+        }
+
+        found
     }
 
     fn matches(&mut self, token_types: &[TokenType]) -> Option<(TokenType, SourceLoc)> {
