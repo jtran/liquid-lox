@@ -1,11 +1,39 @@
 use ast::*;
+use scanner::Scanner;
 use source_loc::*;
 use token::*;
+
+pub fn parse(source: &str) -> Result<Vec<Stmt>, ParseError> {
+    let mut scanner = Scanner::new(source);
+    let tokens = scanner.scan_tokens();
+    let mut parser = Parser::new(tokens);
+
+    parser.parse()
+}
+
+pub fn parse_repl_line(source: &str) -> Result<Vec<Stmt>, ParseError> {
+    let mut scanner = Scanner::new(source);
+    let tokens = scanner.scan_tokens();
+    let mut parser = Parser::with_trailing_expression(tokens);
+
+    parser.parse()
+}
+
+#[allow(dead_code)]
+pub fn parse_expression(code: &str) -> Result<Expr, ParseError> {
+    let mut scanner = Scanner::new(code);
+    let tokens = scanner.scan_tokens();
+    let mut parser = Parser::new(tokens);
+    let ast = parser.parse_expression();
+
+    ast
+}
 
 #[derive(Debug)]
 pub struct Parser<'a> {
     tokens: Vec<Token<'a>>,
     current: usize,
+    allow_trailing_expression: bool,
 }
 
 impl <'a> Parser<'a> {
@@ -13,6 +41,17 @@ impl <'a> Parser<'a> {
         Parser {
             tokens,
             current: 0,
+            allow_trailing_expression: false,
+        }
+    }
+
+    // Construct a parser that allows a trailing expression before the end of
+    // the token stream.  This is designed for the REPL.
+    pub fn with_trailing_expression(tokens: Vec<Token<'a>>) -> Parser<'a> {
+        Parser {
+            tokens,
+            current: 0,
+            allow_trailing_expression: true,
         }
     }
 
@@ -118,7 +157,15 @@ impl <'a> Parser<'a> {
 
     fn expression_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
         let expr = self.expression()?;
-        self.consume(TokenType::Semicolon, "Expected semicolon after expression")?;
+
+        // If we allow a trailing expression and it's the end of the file, we
+        // don't need to consume.  But if there is a semicolon, always consume
+        // it.
+        if ! (self.allow_trailing_expression && self.is_at_end())
+            || self.check(TokenType::Semicolon)
+        {
+            self.consume(TokenType::Semicolon, "Expected semicolon after expression")?;
+        }
 
         Ok(Stmt::Expression(expr))
     }
@@ -401,7 +448,7 @@ impl <'a> Parser<'a> {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ParseError {
-    causes: Vec<ParseErrorCause>,
+    pub causes: Vec<ParseErrorCause>,
 }
 
 impl ParseError {
@@ -452,8 +499,6 @@ mod tests {
     use super::*;
     use ast::Expr::*;
     use scanner::*;
-    use util::parse;
-    use util::parse_expression;
 
     #[test]
     fn test_parse_literal() {

@@ -186,13 +186,20 @@ mod tests {
     use super::*;
     use source_loc::*;
     use value::Value::*;
-    use util::parse;
-    use util::parse_expression;
+    use parser::parse;
+    use parser::parse_repl_line;
+    use parser::parse_expression;
 
     fn interpret(code: &str) -> Result<Value, RuntimeError> {
         let mut interpreter = Interpreter::new();
 
         interpreter.interpret(parse(code)?)
+    }
+
+    fn interpret_repl_line(code: &str) -> Result<Value, RuntimeError> {
+        let mut interpreter = Interpreter::new();
+
+        interpreter.interpret(parse_repl_line(code)?)
     }
 
     fn eval(code: &str) -> Result<Value, RuntimeError> {
@@ -287,5 +294,12 @@ mod tests {
         // Assignment.
         assert_eq!(interpret("var x = 1; { var x = 2; x = 3; x; }"), Ok(NumberVal(3.0)));
         assert_eq!(interpret("var x = 1; { var x = 2; x = 3; } x;"), Ok(NumberVal(1.0)));
+    }
+
+    #[test]
+    fn test_interpret_repl_line() {
+        assert_eq!(interpret_repl_line("1 + 2"), Ok(NumberVal(3.0)));
+        assert_eq!(interpret_repl_line("1 + 2;"), Ok(NumberVal(3.0)));
+        assert_eq!(interpret_repl_line("1 + 2; 10"), Ok(NumberVal(10.0)));
     }
 }

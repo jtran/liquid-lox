@@ -20,8 +20,12 @@ use std::process;
 
 use interpreter::*;
 use parser::*;
-use scanner::*;
 use value::*;
+
+enum RunError {
+    RunParseError(ParseError),
+    RunRuntimeError(RuntimeError),
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -56,7 +60,7 @@ fn run_repl() {
         let mut input = String::new();
         match stdin.lock().read_line(&mut input) {
             Ok(_) => {
-                let result = run(&mut interpreter, input);
+                let result = run(&mut interpreter, input, true);
                 print_result(&result, true);
             }
             Err(error) => {
@@ -67,30 +71,35 @@ fn run_repl() {
     }
 }
 
+// Returns true if there was an error running the file.
 fn run_file(file_path: &str) -> bool {
     let mut file = File::open(file_path).expect(&format!("source file not found: {}", file_path));
     let mut contents = String::new();
     file.read_to_string(&mut contents).expect(&format!("unable to read file: {}", file_path));
 
     let mut interpreter = Interpreter::new();
-    let result = run(&mut interpreter, contents);
+    let result = run(&mut interpreter, contents, false);
     print_result(&result, false);
 
     result.is_err()
 }
 
-fn run(interpreter: &mut Interpreter, source: String) -> Result<Value, RuntimeError> {
-    let mut scanner = Scanner::new(&source);
-    let tokens = scanner.scan_tokens();
-    let mut parser = Parser::new(tokens);
-    // If there's a parse error, it's converted to a runtime error here.
-    let ast = parser.parse()?;
+fn run(interpreter: &mut Interpreter, source: String, for_repl: bool)
+    -> Result<Value, RunError>
+{
+    // If there's a parse error, it's converted to a run error here.
+    let ast = if for_repl {
+        parser::parse_repl_line(&source)
+    }
+    else {
+        parser::parse(&source)
+    }?;
     let result = interpreter.interpret(ast);
 
-    result
+    result.map_err(|err| err.into())
 }
 
-fn print_result(result: &Result<Value, RuntimeError>, print_success: bool) {
+fn print_result(result: &Result<Value, RunError>, print_success: bool) {
     match result {
         Ok(value) => {
             if print_success {
@@ -98,8 +107,29 @@ fn print_result(result: &Result<Value, RuntimeError>, print_success: bool) {
             }
         }
         Err(e) => {
-            // TODO: Treat parse error differently and print all causes.
-            util::error(e.source_loc.line, &e.message);
+            match e {
+                RunError::RunParseError(err) => {
+                    // Print all causes.
+                    for cause in err.causes.iter() {
+                        util::error(cause.source_loc.line, &cause.message);
+                    }
+                }
+                RunError::RunRuntimeError(err) => {
+                    util::error(err.source_loc.line, &err.message);
+                }
+            }
         }
+    }
+}
+
+impl From<ParseError> for RunError {
+    fn from(err: ParseError) -> RunError {
+        RunError::RunParseError(err)
+    }
+}
+
+impl From<RuntimeError> for RunError {
+    fn from(err: RuntimeError) -> RunError {
+        RunError::RunRuntimeError(err)
     }
 }
