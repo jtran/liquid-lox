@@ -43,6 +43,15 @@ impl Interpreter {
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
         use value::Value::*;
         match expr {
+            Expr::Assign(id, expr, loc) => {
+                let value = self.evaluate(expr)?;
+                self.env.assign(&id, value.clone())
+                    .map_err(|_| {
+                        RuntimeError::new(*loc, &format!("Undefined variable: {}", &id))
+                    })?;
+
+                Ok(value)
+            }
             Expr::Binary(left, op, right, loc) => {
                 let left_val = self.evaluate(left)?;
                 let left_type = left_val.runtime_type();
@@ -237,6 +246,13 @@ mod tests {
     #[test]
     fn test_interpret_var_use() {
         assert_eq!(interpret("var x = 1; x;"), Ok(NumberVal(1.0)));
+        assert_eq!(interpret("var x = 1; var y = 3; x = y = 5; x;"), Ok(NumberVal(5.0)));
         assert_eq!(interpret("x;"), Err(RuntimeError::new(SourceLoc::new(1), "Undefined variable: x")));
+    }
+
+    #[test]
+    fn test_interpret_var_assign() {
+        assert_eq!(interpret("var x = 1; x = 2; x;"), Ok(NumberVal(2.0)));
+        assert_eq!(interpret("x = 1;"), Err(RuntimeError::new(SourceLoc::new(1), "Undefined variable: x")));
     }
 }

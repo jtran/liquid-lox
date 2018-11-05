@@ -108,7 +108,26 @@ impl <'a> Parser<'a> {
     }
 
     fn expression(&mut self) -> Result<Expr, ParseErrorCause> {
-        self.equality()
+        self.assignment()
+    }
+
+    fn assignment(&mut self) -> Result<Expr, ParseErrorCause> {
+        let expr = self.equality()?;
+
+        match self.matches(&vec![TokenType::Equal]) {
+            None => Ok(expr), // Not actually an assignment at all.
+            Some((_, loc)) => {
+                // Recurse since this is right associative.
+                let right_expr = self.assignment()?;
+
+                let id = match &expr {
+                    Expr::Variable(id, _) => id.clone(),
+                    _ => return Err(self.new_error(&format!("Invalid assignment target; expected identifier, found: {:?}", &expr))),
+                };
+
+                Ok(Expr::Assign(id, Box::new(right_expr), loc))
+            }
+        }
     }
 
     fn equality(&mut self) -> Result<Expr, ParseErrorCause> {
@@ -443,6 +462,13 @@ mod tests {
     #[test]
     fn test_parse_grouping() {
         assert_eq!(parse_expression("(40)"), Ok(Grouping(Box::new(LiteralNumber(40.0)))));
+    }
+
+    #[test]
+    fn test_parse_assign() {
+        assert_eq!(parse_expression("x = 1"), Ok(Assign("x".to_string(),
+                                                        Box::new(LiteralNumber(1.0)),
+                                                        SourceLoc::new(1))));
     }
 
     #[test]

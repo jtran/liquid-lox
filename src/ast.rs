@@ -9,6 +9,7 @@ pub enum Stmt {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
+    Assign(String, Box<Expr>, SourceLoc),
     Binary(Box<Expr>, BinaryOperator, Box<Expr>, SourceLoc),
     Grouping(Box<Expr>),
     LiteralBool(bool),
