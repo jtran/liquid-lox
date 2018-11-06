@@ -125,11 +125,13 @@ impl <'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseErrorCause> {
-        match self.matches(&vec![TokenType::If,
+        match self.matches(&vec![TokenType::For,
+                                 TokenType::If,
                                  TokenType::LeftBrace,
                                  TokenType::Print,
                                  TokenType::While]) {
             None => self.expression_statement(),
+            Some((TokenType::For, _)) => self.finish_for_statement(),
             Some((TokenType::If, _)) => self.finish_if_statement(),
             Some((TokenType::LeftBrace, _)) => {
                 self.finish_block().map(|statements| Stmt::Block(statements))
@@ -137,6 +139,62 @@ impl <'a> Parser<'a> {
             Some((TokenType::Print, _)) => self.finish_print_statement(),
             Some((TokenType::While, _)) => self.finish_while_statement(),
             Some((token_type, loc)) => panic!("statement: unexpected token type: {:?} loc={:?}", token_type, loc),
+        }
+    }
+
+    fn finish_for_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
+        // The For token has already been consumed.
+        self.consume(TokenType::LeftParen, "Expected left parenthesis after for")?;
+        let initializer = if self.match_token(TokenType::Semicolon) {
+            None
+        }
+        else if self.match_token(TokenType::Var) {
+            Some(self.finish_var_declaration()?)
+        }
+        else {
+            Some(self.expression_statement()?)
+        };
+        let condition = if self.check(TokenType::Semicolon) {
+            Expr::LiteralBool(true)
+        }
+        else {
+            self.expression()?
+        };
+        self.consume(TokenType::Semicolon, "Expected semicolon after for-loop condition")?;
+        let increment = if self.check(TokenType::RightParen) {
+            None
+        }
+        else {
+            Some(self.expression()?)
+        };
+        self.consume(TokenType::RightParen, "Expected right parenthesis after for-loop increment")?;
+        let loop_body = self.statement()?;
+
+        // Convert into while loop.
+        let while_body = match increment {
+            None => loop_body,
+            Some(increment_expr) => {
+                // We have an increment expression.  Add it to the end of the
+                // loop body.
+                let increment_stmt = Stmt::Expression(increment_expr);
+                if let Stmt::Block(mut stmts) = loop_body {
+                    stmts.push(increment_stmt);
+
+                    Stmt::Block(stmts)
+                }
+                else {
+                    Stmt::Block(vec![loop_body, increment_stmt])
+                }
+            }
+        };
+        let while_loop = Stmt::While(condition, Box::new(while_body));
+
+        match initializer {
+            None => Ok(while_loop),
+            Some(init_stmt) => {
+                Ok(Stmt::Block(vec![init_stmt,
+                                    while_loop]))
+            }
         }
     }
 
