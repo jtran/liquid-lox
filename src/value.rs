@@ -85,6 +85,24 @@ impl fmt::Display for RuntimeType {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ExecutionInterrupt {
+    Error(RuntimeError),
+    Break(SourceLoc),
+}
+
+impl From<ParseError> for ExecutionInterrupt {
+    fn from(error: ParseError) -> ExecutionInterrupt {
+        ExecutionInterrupt::Error(error.into())
+    }
+}
+
+impl From<RuntimeError> for ExecutionInterrupt {
+    fn from(error: RuntimeError) -> ExecutionInterrupt {
+        ExecutionInterrupt::Error(error)
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RuntimeError {
     pub source_loc: SourceLoc,
     pub message: String,
@@ -102,5 +120,16 @@ impl RuntimeError {
 impl From<ParseError> for RuntimeError {
     fn from(err: ParseError) -> RuntimeError {
         RuntimeError::new(err.source_loc(), &format!("parse error: {}", &err.message()))
+    }
+}
+
+impl From<ExecutionInterrupt> for RuntimeError {
+    fn from(interrupt: ExecutionInterrupt) -> RuntimeError {
+        match interrupt {
+            // If you hit this error, it's probably due to a break statement
+            // outside of a loop.  The parser should disallow this.
+            ExecutionInterrupt::Break(_) => panic!("Unexpected break execution interrupt: {:?}", &interrupt),
+            ExecutionInterrupt::Error(error) => error,
+        }
     }
 }

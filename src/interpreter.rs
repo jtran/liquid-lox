@@ -15,16 +15,25 @@ impl Interpreter {
         }
     }
 
+    // The public interface to execute an entire program.
     pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<Value, RuntimeError> {
-        let mut result = Value::NilVal;
+        let mut value = Value::NilVal;
         for stmt in statements.iter() {
-            result = self.execute(stmt)?;
+            value = self.execute(stmt)?;
         }
 
-        Ok(result)
+        Ok(value)
     }
 
+    // The public interface to execute a single statement.
     pub fn execute(&mut self, statement: &Stmt) -> Result<Value, RuntimeError> {
+        Ok(self.exec(statement)?)
+    }
+
+    // Internal interface to execute a single statement.  This allows a more
+    // diverse error type for control flow that's hidden from the public
+    // interface.
+    fn exec(&mut self, statement: &Stmt) -> Result<Value, ExecutionInterrupt> {
         match statement {
             Stmt::Block(statements) => {
                 // Create a new environment.
@@ -35,7 +44,7 @@ impl Interpreter {
                 // Execute statements.
                 let mut result = Ok(Value::NilVal);
                 for statement in statements {
-                    result = self.execute(statement);
+                    result = self.exec(statement);
                     if result.is_err() {
                         break;
                     }
@@ -48,16 +57,17 @@ impl Interpreter {
 
                 result
             }
-            Stmt::Expression(expr) => self.evaluate(expr),
+            Stmt::Break(loc) => Err(ExecutionInterrupt::Break(*loc)),
+            Stmt::Expression(expr) => self.evaluate(expr).map_err(|err| err.into()),
             Stmt::If(condition, then_stmt, else_stmt) => {
                 let cond_value = self.evaluate(condition)?;
 
                 if cond_value.is_truthy() {
-                    self.execute(then_stmt)
+                    self.exec(then_stmt)
                 }
                 else {
                     match else_stmt {
-                        Some(stmt) => self.execute(stmt),
+                        Some(stmt) => self.exec(stmt),
                         None => Ok(Value::NilVal),
                     }
                 }
@@ -75,12 +85,17 @@ impl Interpreter {
                 Ok(Value::NilVal)
             }
             Stmt::While(condition, body) => {
-                let mut result = Value::NilVal;
                 while self.evaluate(condition)?.is_truthy() {
-                    result = self.execute(body)?;
+                    match self.exec(body) {
+                        Ok(_) => (),
+                        Err(ExecutionInterrupt::Break(_)) => break,
+                        Err(ExecutionInterrupt::Error(error)) => {
+                            return Err(error.into());
+                        }
+                    }
                 }
 
-                Ok(result)
+                Ok(Value::NilVal)
             }
         }
     }
@@ -223,11 +238,11 @@ impl Interpreter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use source_loc::*;
-    use value::Value::*;
     use parser::parse;
     use parser::parse_repl_line;
     use parser::parse_expression;
+    use source_loc::*;
+    use value::Value::*;
 
     fn interpret(code: &str) -> Result<Value, RuntimeError> {
         let mut interpreter = Interpreter::new();
@@ -366,8 +381,28 @@ mod tests {
     }
 
     #[test]
+    fn test_interpret_while_break() {
+        assert_eq!(interpret("var x = 0; while (true) { if (x > 3) break; x = x + 1; } x;"), Ok(NumberVal(4.0)));
+    }
+
+    #[test]
+    fn test_interpret_top_level_break() {
+        assert_eq!(interpret("1 + 2;\nbreak;"), Err(RuntimeError::new(SourceLoc::new(2), "parse error: Found break statement outside of loop body")));
+    }
+
+    #[test]
     fn test_interpret_for_loop() {
         assert_eq!(interpret("var x = 1;\nfor (var i = 0; i < 3; i = i + 1)\nx = x * 2;\nx;"), Ok(NumberVal(8.0)));
         assert_eq!(interpret("var x = 1;\nfor (var i = 0; i < 3; i = i + 1)\n{ x = x * 2; }\nx;"), Ok(NumberVal(8.0)));
+    }
+
+    #[test]
+    fn test_interpret_for_loop_break() {
+        assert_eq!(interpret("
+            var x = 1;
+            for (;; x = x + 1) {
+                if (x > 3) break;
+            }
+            x;"), Ok(NumberVal(4.0)));
     }
 }

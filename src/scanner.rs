@@ -11,6 +11,7 @@ lazy_static! {
         let mut m = HashMap::new();
         use token::TokenType::*;
         m.insert("and", And);
+        m.insert("break", Break);
         m.insert("class", Class);
         m.insert("else", Else);
         m.insert("false", False);
@@ -449,6 +450,9 @@ mod tests {
     fn test_scan_keywords() {
         let mut s = Scanner::new("and");
         assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::And, "and", None, None, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        let mut s = Scanner::new("break");
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Break, "break", None, None, 1),
                                          Token::new(TokenType::Eof, "", None, None, 1)]);
         let mut s = Scanner::new("class");
         assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Class, "class", None, None, 1),

@@ -3,6 +3,7 @@ use source_loc::*;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
     Block(Vec<Stmt>),
+    Break(SourceLoc),
     Expression(Expr),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),

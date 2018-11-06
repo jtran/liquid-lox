@@ -33,6 +33,7 @@ pub fn parse_expression(code: &str) -> Result<Expr, ParseError> {
 pub struct Parser<'a> {
     tokens: Vec<Token<'a>>,
     current: usize,
+    in_loops: usize,
     allow_trailing_expression: bool,
 }
 
@@ -41,6 +42,7 @@ impl <'a> Parser<'a> {
         Parser {
             tokens,
             current: 0,
+            in_loops: 0,
             allow_trailing_expression: false,
         }
     }
@@ -51,6 +53,7 @@ impl <'a> Parser<'a> {
         Parser {
             tokens,
             current: 0,
+            in_loops: 0,
             allow_trailing_expression: true,
         }
     }
@@ -125,12 +128,14 @@ impl <'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseErrorCause> {
-        match self.matches(&vec![TokenType::For,
+        match self.matches(&vec![TokenType::Break,
+                                 TokenType::For,
                                  TokenType::If,
                                  TokenType::LeftBrace,
                                  TokenType::Print,
                                  TokenType::While]) {
             None => self.expression_statement(),
+            Some((TokenType::Break, loc)) => self.finish_break_statement(loc),
             Some((TokenType::For, _)) => self.finish_for_statement(),
             Some((TokenType::If, _)) => self.finish_if_statement(),
             Some((TokenType::LeftBrace, _)) => {
@@ -140,6 +145,16 @@ impl <'a> Parser<'a> {
             Some((TokenType::While, _)) => self.finish_while_statement(),
             Some((token_type, loc)) => panic!("statement: unexpected token type: {:?} loc={:?}", token_type, loc),
         }
+    }
+
+    fn finish_break_statement(&mut self, loc: SourceLoc) -> Result<Stmt, ParseErrorCause> {
+        // The Break token has already been consumed.
+        if self.in_loops == 0 {
+            return Err(self.new_error("Found break statement outside of loop body"));
+        }
+        self.consume(TokenType::Semicolon, "Expected semicolon after break")?;
+
+        Ok(Stmt::Break(loc))
     }
 
     fn finish_for_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
@@ -168,7 +183,7 @@ impl <'a> Parser<'a> {
             Some(self.expression()?)
         };
         self.consume(TokenType::RightParen, "Expected right parenthesis after for-loop increment")?;
-        let loop_body = self.statement()?;
+        let loop_body = self.loop_body_statement()?;
 
         // Convert into while loop.
         let while_body = match increment {
@@ -240,9 +255,18 @@ impl <'a> Parser<'a> {
         self.consume(TokenType::LeftParen, "Expected left parenthesis after while")?;
         let condition = self.expression()?;
         self.consume(TokenType::RightParen, "Expected right parenthesis after while condition")?;
-        let body = self.statement()?;
+        let body = self.loop_body_statement()?;
 
         Ok(Stmt::While(condition, Box::new(body)))
+    }
+
+    // Parses a statement while also tracking that we are inside a loop body.
+    fn loop_body_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
+        self.in_loops = self.in_loops.checked_add(1).expect("Too many nested loops");
+        let body_result = self.statement();
+        self.in_loops -= 1;
+
+        body_result
     }
 
     fn expression_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
@@ -687,5 +711,18 @@ mod tests {
     #[test]
     fn test_parse_statements() {
         assert_eq!(parse("print \"one\";"), Ok(vec![Stmt::Print(LiteralString("one".into()))]));
+    }
+
+    #[test]
+    fn test_parse_while_loop_break() {
+        let loc = SourceLoc::new(1);
+        assert_eq!(parse("while (true) break;"), Ok(vec![Stmt::While(LiteralBool(true),
+                                                                     Box::new(Stmt::Break(loc)))]));
+        assert!(parse("for (;;) if (true) break;").is_ok());
+        assert!(parse("while (true) if (true) break;").is_ok());
+        assert!(parse("while (true) while(true) break;").is_ok());
+
+        assert!(parse("break;").is_err());
+        assert!(parse("for (;;) nil; break;").is_err());
     }
 }
