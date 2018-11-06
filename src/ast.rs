@@ -7,6 +7,7 @@ pub enum Stmt {
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
     Var(String, Expr),
+    While(Expr, Box<Stmt>),
 }
 
 #[derive(Clone, Debug, PartialEq)]

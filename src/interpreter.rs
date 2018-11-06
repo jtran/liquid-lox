@@ -74,6 +74,14 @@ impl Interpreter {
 
                 Ok(Value::NilVal)
             }
+            Stmt::While(condition, body) => {
+                let mut result = Value::NilVal;
+                while self.evaluate(condition)?.is_truthy() {
+                    result = self.execute(body)?;
+                }
+
+                Ok(result)
+            }
         }
     }
 
@@ -350,5 +358,10 @@ mod tests {
         assert_eq!(interpret("false and 2;"), Ok(BoolVal(false)));
         assert_eq!(interpret("1 or 2;"), Ok(NumberVal(1.0)));
         assert_eq!(interpret("nil or 2;"), Ok(NumberVal(2.0)));
+    }
+
+    #[test]
+    fn test_interpret_while() {
+        assert_eq!(interpret("var x = 0; while (x < 3) x = x + 1; x;"), Ok(NumberVal(3.0)));
     }
 }

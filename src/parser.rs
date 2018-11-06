@@ -125,13 +125,17 @@ impl <'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseErrorCause> {
-        match self.matches(&vec![TokenType::If, TokenType::LeftBrace, TokenType::Print]) {
+        match self.matches(&vec![TokenType::If,
+                                 TokenType::LeftBrace,
+                                 TokenType::Print,
+                                 TokenType::While]) {
             None => self.expression_statement(),
             Some((TokenType::If, _)) => self.finish_if_statement(),
             Some((TokenType::LeftBrace, _)) => {
                 self.finish_block().map(|statements| Stmt::Block(statements))
             }
             Some((TokenType::Print, _)) => self.finish_print_statement(),
+            Some((TokenType::While, _)) => self.finish_while_statement(),
             Some((token_type, loc)) => panic!("statement: unexpected token type: {:?} loc={:?}", token_type, loc),
         }
     }
@@ -171,6 +175,16 @@ impl <'a> Parser<'a> {
         self.consume(TokenType::Semicolon, "Expected semicolon after print value")?;
 
         Ok(Stmt::Print(expr))
+    }
+
+    fn finish_while_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
+        // The While token has already been consumed.
+        self.consume(TokenType::LeftParen, "Expected left parenthesis after while")?;
+        let condition = self.expression()?;
+        self.consume(TokenType::RightParen, "Expected right parenthesis after while condition")?;
+        let body = self.statement()?;
+
+        Ok(Stmt::While(condition, Box::new(body)))
     }
 
     fn expression_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
