@@ -3,6 +3,7 @@ use std::collections::hash_map::Entry;
 
 use value::*;
 
+#[derive(Clone, Debug)]
 pub struct Environment {
     values: HashMap<String, Value>,
     pub enclosing: Option<Box<Environment>>,

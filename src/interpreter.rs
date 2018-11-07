@@ -1,7 +1,9 @@
 use std::mem;
+use std::time::SystemTime;
 
 use ast::*;
 use environment::*;
+use source_loc::*;
 use value::*;
 
 pub struct Interpreter {
@@ -10,8 +12,12 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Interpreter {
+        let mut globals = Environment::default();
+        globals.define(&NativeFunctionId::Clock.to_string(),
+            Value::NativeFunctionVal(NativeFunctionId::Clock));
+
         Interpreter {
-            env: Box::new(Environment::default()),
+            env: Box::new(globals),
         }
     }
 
@@ -185,6 +191,15 @@ impl Interpreter {
                     },
                 }
             }
+            Expr::Call(callee, arguments, loc) => {
+                let callee_val = self.evaluate(callee)?;
+                let mut arg_vals: Vec<Value> = Vec::with_capacity(arguments.len());
+                for (i, arg) in arguments.iter().enumerate() {
+                    arg_vals[i] = self.evaluate(arg)?;
+                }
+
+                self.call(callee_val, arg_vals, *loc)
+            }
             Expr::Grouping(e) => self.evaluate(e),
             Expr::LiteralBool(b) => Ok(BoolVal(*b)),
             Expr::LiteralNil => Ok(NilVal),
@@ -233,6 +248,54 @@ impl Interpreter {
             }
         }
     }
+
+    fn call(&mut self, callee: Value, args: Vec<Value>, loc: SourceLoc)
+        -> Result<Value, RuntimeError>
+    {
+        match callee {
+            Value::NativeFunctionVal(id) => {
+                let native_function = NativeFunction::new(id);
+                let arity = native_function.arity();
+                let args_len = args.len();
+                if args_len != arity {
+                    return Err(RuntimeError::new(loc, &format!("Function expected {} arguments, but you attempted to call it with {}", arity, args_len)));
+                }
+                let return_value_result = native_function.call(args, loc);
+
+                return_value_result.map_err(|e| e.into())
+            }
+            _ => Err(RuntimeError::new(loc, &format!("You can only call functions and classes, but you tried to call: {}", callee))),
+        }
+    }
+}
+
+struct NativeFunction {
+    id: NativeFunctionId
+}
+
+impl NativeFunction {
+    pub fn new(id: NativeFunctionId) -> NativeFunction {
+        NativeFunction { id }
+    }
+
+    pub fn arity(&self) -> usize {
+        match self.id {
+            NativeFunctionId::Clock => 0,
+        }
+    }
+
+    pub fn call(&self, _args: Vec<Value>, loc: SourceLoc) -> Result<Value, RuntimeError> {
+        match self.id {
+            NativeFunctionId::Clock => {
+                let sys_time = SystemTime::now();
+
+                match sys_time.duration_since(SystemTime::UNIX_EPOCH) {
+                    Ok(duration) => Ok(Value::NumberVal(duration.as_secs() as f64)),
+                    Err(_) => Err(RuntimeError::new(loc, "Unable to get system time since now is before the epoch")),
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -241,7 +304,6 @@ mod tests {
     use parser::parse;
     use parser::parse_repl_line;
     use parser::parse_expression;
-    use source_loc::*;
     use value::Value::*;
 
     fn interpret(code: &str) -> Result<Value, RuntimeError> {
@@ -404,5 +466,12 @@ mod tests {
                 if (x > 3) break;
             }
             x;"), Ok(NumberVal(4.0)));
+    }
+
+    #[test]
+    fn test_interpret_native_function_call() {
+        assert_eq!(interpret("
+            var t = clock();
+            t > 0;"), Ok(BoolVal(true)));
     }
 }

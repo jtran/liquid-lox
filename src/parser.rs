@@ -420,7 +420,7 @@ impl <'a> Parser<'a> {
 
     fn unary(&mut self) -> Result<Expr, ParseErrorCause> {
         match self.matches(&vec![TokenType::Bang, TokenType::Minus]) {
-            None => self.primary(),
+            None => self.call(),
             Some((operator, loc)) => {
                 let right = self.unary()?;
 
@@ -432,6 +432,39 @@ impl <'a> Parser<'a> {
                 Ok(Expr::Unary(unary_op, Box::new(right), loc))
             }
         }
+    }
+
+    fn call(&mut self) -> Result<Expr, ParseErrorCause> {
+        let mut expr = self.primary()?;
+
+        loop {
+            match self.matches(&vec![TokenType::LeftParen]) {
+                None => break,
+                Some((_, loc)) => {
+                    expr = self.finish_call(expr, loc)?;
+                }
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn finish_call(&mut self, expr: Expr, loc: SourceLoc) -> Result<Expr, ParseErrorCause> {
+        // LeftParen token already consumed.
+        let mut args = Vec::new();
+        if ! self.check(TokenType::RightParen) {
+            loop {
+                if args.len() >= 16 {
+                    return Err(self.new_error("Cannot have more than 16 arguments in a function call"));
+                }
+                args.push(self.expression()?);
+
+                if ! self.match_token(TokenType::Comma) { break; }
+            }
+        }
+        self.consume(TokenType::RightParen, "Expected right parenthesis after arguments")?;
+
+        Ok(Expr::Call(Box::new(expr), args, loc))
     }
 
     fn primary(&mut self) -> Result<Expr, ParseErrorCause> {
