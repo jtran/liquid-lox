@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use ast::*;
 use scanner::Scanner;
 use source_loc::*;
@@ -298,11 +300,11 @@ impl <'a> Parser<'a> {
                 let right_expr = self.assignment()?;
 
                 let id = match &expr {
-                    Expr::Variable(id, _) => id.clone(),
+                    Expr::Variable(id, _, _) => id.clone(),
                     _ => return Err(self.new_error(&format!("Invalid assignment target; expected identifier, found: {:?}", &expr))),
                 };
 
-                Ok(Expr::Assign(id, Box::new(right_expr), loc))
+                Ok(Expr::Assign(id, Cell::new(0), Box::new(right_expr), loc))
             }
         }
     }
@@ -504,7 +506,7 @@ impl <'a> Parser<'a> {
                     Some(token) => {
                         let loc = SourceLoc::new(token.line);
 
-                        Expr::Variable(token.lexeme.to_string(), loc)
+                        Expr::Variable(token.lexeme.to_string(), Cell::new(0), loc)
                     }
                 }
             }
@@ -713,6 +715,7 @@ mod tests {
     #[test]
     fn test_parse_assign() {
         assert_eq!(parse_expression("x = 1"), Ok(Assign("x".to_string(),
+                                                        Cell::new(0),
                                                         Box::new(LiteralNumber(1.0)),
                                                         SourceLoc::new(1))));
     }

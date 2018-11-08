@@ -1,3 +1,5 @@
+use std::cell::Cell;
+
 use source_loc::*;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -13,7 +15,7 @@ pub enum Stmt {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
-    Assign(String, Box<Expr>, SourceLoc),
+    Assign(String, Cell<usize>, Box<Expr>, SourceLoc),
     Call(Box<Expr>, Vec<Expr>, SourceLoc),
     Binary(Box<Expr>, BinaryOperator, Box<Expr>, SourceLoc),
     Grouping(Box<Expr>),
@@ -22,7 +24,7 @@ pub enum Expr {
     LiteralNil,
     LiteralString(String),
     Logical(Box<Expr>, LogicalOperator, Box<Expr>),
-    Variable(String, SourceLoc),
+    Variable(String, Cell<usize>, SourceLoc),
     Unary(UnaryOperator, Box<Expr>, SourceLoc),
 }
 

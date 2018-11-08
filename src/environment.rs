@@ -30,28 +30,51 @@ impl Environment {
         self.values.insert(key.to_string(), value);
     }
 
-    pub fn get(&self, key: &str) -> Option<&Value> {
-        self.values.get(key)
-            .or_else(||
-                // If it's not found, look in the enclosing environment.
-                match self.enclosing {
-                    None => None,
-                    Some(ref env) => env.get(key),
-                })
+    pub fn get_at(&self, key: &str, distance: usize) -> Option<&Value> {
+        match self.ancestor(distance) {
+            None => panic!("tried to look up a variable at a distance greater than exists: {} distance={}", key, distance),
+            Some(env) => env.values.get(key),
+        }
     }
 
     // Returns an error result if the key isn't already defined.
-    pub fn assign(&mut self, key: &str, new_value: Value) -> Result<(),()> {
-        let entry = self.values.entry(key.to_string())
-                        .and_modify(|old_value| { old_value.clone_from(&new_value); });
-        match entry {
-            Entry::Occupied(_) => Ok(()),
-            Entry::Vacant(_) => {
-                // Not found.  Assign in enclosing scope.
-                match self.enclosing {
-                    None => Err(()),
-                    Some(ref mut env) => env.assign(key, new_value),
+    pub fn assign_at(&mut self, key: &str, distance: usize, new_value: Value) -> Result<(), ()> {
+        match self.ancestor_mut(distance) {
+            None => panic!("tried to look up a variable at a distance greater than exists: {} distance={}", key, distance),
+            Some(ref mut env) => {
+                // Assign at this level.
+                let entry = env.values.entry(key.to_string())
+                                .and_modify(|old_value| { old_value.clone_from(&new_value); });
+                return match entry {
+                    Entry::Occupied(_) => Ok(()),
+                    Entry::Vacant(_) => Err(()), // Not found.
                 }
+            }
+        };
+    }
+
+    fn ancestor(&self, distance: usize) -> Option<&Environment> {
+        // TODO: implement this without recursion.
+        if distance == 0 {
+            Some(self)
+        }
+        else {
+            match self.enclosing {
+                Some(ref env) => env.ancestor(distance - 1),
+                None => None,
+            }
+        }
+    }
+
+    fn ancestor_mut(&mut self, distance: usize) -> Option<&mut Environment> {
+        // TODO: implement this without recursion.
+        if distance == 0 {
+            Some(self)
+        }
+        else {
+            match self.enclosing {
+                Some(ref mut env) => env.ancestor_mut(distance - 1),
+                None => None,
             }
         }
     }

@@ -6,6 +6,7 @@ mod ast;
 mod environment;
 mod interpreter;
 mod parser;
+mod resolver;
 mod scanner;
 mod source_loc;
 mod token;
@@ -88,12 +89,13 @@ fn run(interpreter: &mut Interpreter, source: String, for_repl: bool)
     -> Result<Value, RunError>
 {
     // If there's a parse error, it's converted to a run error here.
-    let ast = if for_repl {
+    let mut ast = if for_repl {
         parser::parse_repl_line(&source)
     }
     else {
         parser::parse(&source)
     }?;
+    resolver::resolve(&mut ast).map_err(|e| ParseError::from(e))?;
     let result = interpreter.interpret(ast);
 
     result.map_err(|err| err.into())

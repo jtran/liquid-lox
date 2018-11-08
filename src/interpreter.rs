@@ -109,9 +109,9 @@ impl Interpreter {
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
         use value::Value::*;
         match expr {
-            Expr::Assign(id, expr, loc) => {
+            Expr::Assign(id, dist_cell, expr, loc) => {
                 let value = self.evaluate(expr)?;
-                self.env.assign(&id, value.clone())
+                self.env.assign_at(&id, dist_cell.get(), value.clone())
                     .map_err(|_| {
                         RuntimeError::new(*loc, &format!("Undefined variable: {}", &id))
                     })?;
@@ -223,8 +223,8 @@ impl Interpreter {
                     self.evaluate(right)
                 }
             }
-            Expr::Variable(id, loc) => {
-                self.env.get(id)
+            Expr::Variable(id, dist_cell, loc) => {
+                self.env.get_at(id, dist_cell.get())
                     // TODO: Don't clone here since it copies strings.  We only
                     // have a reference to the value, though.
                     .map(|value| value.clone())
@@ -301,27 +301,32 @@ impl NativeFunction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use parser::parse;
-    use parser::parse_repl_line;
-    use parser::parse_expression;
+    use parser::*;
+    use resolver;
     use value::Value::*;
 
     fn interpret(code: &str) -> Result<Value, RuntimeError> {
+        let mut ast = parse(code)?;
+        resolver::resolve(&mut ast).map_err(|e| ParseError::from(e))?;
         let mut interpreter = Interpreter::new();
 
-        interpreter.interpret(parse(code)?)
+        interpreter.interpret(ast)
     }
 
     fn interpret_repl_line(code: &str) -> Result<Value, RuntimeError> {
+        let mut ast = parse_repl_line(code)?;
+        resolver::resolve(&mut ast).map_err(|e| ParseError::from(e))?;
         let mut interpreter = Interpreter::new();
 
-        interpreter.interpret(parse_repl_line(code)?)
+        interpreter.interpret(ast)
     }
 
     fn eval(code: &str) -> Result<Value, RuntimeError> {
+        let mut ast = parse_expression(code)?;
+        resolver::resolve_expression(&mut ast).map_err(|e| ParseError::from(e))?;
         let mut interpreter = Interpreter::new();
 
-        interpreter.evaluate(&parse_expression(code)?)
+        interpreter.evaluate(&ast)
     }
 
     #[test]
