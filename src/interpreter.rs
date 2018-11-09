@@ -344,10 +344,17 @@ impl NativeFunction {
     pub fn call(&self, _args: Vec<Value>, loc: SourceLoc) -> Result<Value, RuntimeError> {
         match self.id {
             NativeFunctionId::Clock => {
+                const MILLIS_PER_SEC: u64 = 1000;
                 let sys_time = SystemTime::now();
 
                 match sys_time.duration_since(SystemTime::UNIX_EPOCH) {
-                    Ok(duration) => Ok(Value::NumberVal(duration.as_secs() as f64)),
+                    Ok(duration) => {
+                        let secs = duration.as_secs() as u128;
+                        let millis = duration.subsec_millis() as u128;
+                        let combined_millis = secs * MILLIS_PER_SEC as u128 + millis;
+
+                        Ok(Value::NumberVal(combined_millis as f64 / 1000.0))
+                    }
                     Err(_) => Err(RuntimeError::new(loc, "Unable to get system time since now is before the epoch")),
                 }
             }
