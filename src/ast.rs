@@ -7,7 +7,7 @@ pub enum Stmt {
     Block(Vec<Stmt>),
     Break(SourceLoc),
     Expression(Expr),
-    Fun(String, Vec<Parameter>, Vec<Stmt>, SourceLoc),
+    Fun(FunctionDefinition),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
     Return(Expr, SourceLoc),
@@ -28,6 +28,14 @@ pub enum Expr {
     Logical(Box<Expr>, LogicalOperator, Box<Expr>),
     Variable(String, Cell<usize>, SourceLoc),
     Unary(UnaryOperator, Box<Expr>, SourceLoc),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FunctionDefinition {
+    pub name: String,
+    pub parameters: Vec<Parameter>,
+    pub body: Vec<Stmt>,
+    pub source_loc: SourceLoc,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -65,6 +73,22 @@ pub enum LogicalOperator {
 impl AsRef<Stmt> for Stmt {
     fn as_ref(&self) -> &Self {
         self
+    }
+}
+
+impl FunctionDefinition {
+    pub fn new(name: String,
+               parameters: Vec<Parameter>,
+               body: Vec<Stmt>,
+               source_loc: SourceLoc)
+        -> FunctionDefinition
+    {
+        FunctionDefinition {
+            name,
+            parameters,
+            body,
+            source_loc,
+        }
     }
 }
 

@@ -11,7 +11,7 @@ use util;
 #[derive(Clone, PartialEq)]
 pub enum Value {
     BoolVal(bool),
-    ClosureVal(String, Vec<Parameter>, Vec<Stmt>, Rc<RefCell<Environment>>, SourceLoc),
+    ClosureVal(Rc<FunctionDefinition>, Rc<RefCell<Environment>>),
     NativeFunctionVal(NativeFunctionId),
     NilVal,
     NumberVal(f64),
@@ -33,7 +33,7 @@ impl Value {
     pub fn is_truthy(&self) -> bool {
         match self {
             BoolVal(b) => *b,
-            ClosureVal(_, _, _, _, _) => true,
+            ClosureVal(_, _) => true,
             NativeFunctionVal(_) => true,
             NilVal => false,
             NumberVal(_) | StringVal(_) => true,
@@ -43,12 +43,11 @@ impl Value {
     pub fn is_equal(&self, other: &Value) -> bool {
         match (self, other) {
             (BoolVal(b1), BoolVal(b2)) => b1 == b2,
-            (ClosureVal(id1, p1, body1, env1, _), ClosureVal(id2, p2, body2, env2, _)) => {
+            (ClosureVal(fun_def1, env1), ClosureVal(fun_def2, env2)) => {
                 // Checking environments first since it's a fast pointer
                 // equality.  It also kind of matters that they are the same
                 // environments because they can be mutated.
-                util::same_object::<Rc<_>>(env1, env2) &&
-                    id1 == id2 && p1 == p2 && body1 == body2
+                util::same_object::<Rc<_>>(env1, env2) && fun_def1 == fun_def2
             }
             (NativeFunctionVal(id1), NativeFunctionVal(id2)) => id1 == id2,
             (NilVal, NilVal) => true,
@@ -61,7 +60,7 @@ impl Value {
     pub fn runtime_type(&self) -> RuntimeType {
         match self {
             BoolVal(_) => RuntimeType::BoolType,
-            ClosureVal(_, _, _, _, _) => RuntimeType::CallableType,
+            ClosureVal(_, _) => RuntimeType::CallableType,
             NativeFunctionVal(_) => RuntimeType::CallableType,
             NilVal => RuntimeType::NilType,
             NumberVal(_) => RuntimeType::NumberType,
@@ -73,7 +72,7 @@ impl Value {
         match self {
             BoolVal(true) => "true".into(),
             BoolVal(false) => "false".into(),
-            ClosureVal(id, _, _, _, _) => format!("<fn {}>", id),
+            ClosureVal(fun_def, _) => format!("<fn {}>", fun_def.name),
             NativeFunctionVal(id) => format!("<native fn {}>", id),
             NilVal => "nil".into(),
             NumberVal(x) => format!("{}", x),
@@ -89,13 +88,13 @@ impl fmt::Display for Value {
         match self {
             BoolVal(false) => write!(f, "false"),
             BoolVal(true) => write!(f, "true"),
-            ClosureVal(id, parameters, _, _, _) => {
-                let param_names = parameters.iter()
+            ClosureVal(fun_def, _) => {
+                let param_names = fun_def.parameters.iter()
                     .map(|p| p.name.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
 
-                write!(f, "fun {}({}) {{...}}", id, param_names)
+                write!(f, "fun {}({}) {{...}}", fun_def.name, param_names)
             }
             NativeFunctionVal(id) => write!(f, "{}", id),
             NilVal => write!(f, "nil"),
@@ -111,8 +110,8 @@ impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             BoolVal(b) => write!(f, "BoolVal({:?})", b),
-            ClosureVal(id, parameters, body, _, loc) => {
-                write!(f, "ClosureVal({:?}, {:?}, {:?}, Rc(...), {:?})", id, parameters, body, loc)
+            ClosureVal(fun_def, _) => {
+                write!(f, "ClosureVal({:?}, Rc(...))", fun_def)
             }
             NativeFunctionVal(id) => write!(f, "NativeFunctionVal({:?})", id),
             NilVal => write!(f, "NilVal"),
@@ -198,5 +197,16 @@ impl fmt::Display for NativeFunctionId {
         match self {
             Clock => write!(f, "clock"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem;
+
+    #[test]
+    fn test_size_of_value() {
+        assert_eq!(mem::size_of::<Value>(), 32);
     }
 }

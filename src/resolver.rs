@@ -72,20 +72,20 @@ impl Resolver {
             }
             Stmt::Break(_) => Ok(()),
             Stmt::Expression(expr) => self.resolve_expression(expr),
-            Stmt::Fun(name, parameters, body, _) => {
-                self.define(name);
+            Stmt::Fun(fun_def) => {
+                self.define(&fun_def.name);
 
                 // Track that we're in a function.
                 let enclosing_func_type = self.function_type;
                 self.function_type = FunctionType::Plain;
 
                 self.begin_scope();
-                for parameter in parameters {
+                for parameter in &fun_def.parameters {
                     self.define(&parameter.name);
                 }
                 let mut result = Ok(());
-                for body_statement in body {
-                    result = self.resolve_statement(body_statement);
+                for mut body_statement in &mut fun_def.body {
+                    result = self.resolve_statement(&mut body_statement);
                     if result.is_err() {
                         break;
                     }

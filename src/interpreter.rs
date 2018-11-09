@@ -52,10 +52,10 @@ impl Interpreter {
             }
             Stmt::Break(loc) => Err(ExecutionInterrupt::Break(*loc)),
             Stmt::Expression(expr) => self.evaluate(expr).map_err(|err| err.into()),
-            Stmt::Fun(name, parameters, body, loc) => {
-                let closure = Value::ClosureVal(name.clone(), parameters.clone(), body.clone(), Rc::clone(&self.env), *loc);
+            Stmt::Fun(fun_def) => {
+                let closure = Value::ClosureVal(Rc::new(fun_def.clone()), Rc::clone(&self.env));
                 let mut env = self.env.deref().borrow_mut();
-                env.define(name, closure);
+                env.define(&fun_def.name, closure);
 
                 Ok(Value::NilVal)
             }
@@ -285,17 +285,17 @@ impl Interpreter {
 
                 return_value_result
             }
-            Value::ClosureVal(_, parameters, body, env_sptr, loc) => {
-                self.check_call_arity(parameters.len(), args.len(), &loc)?;
+            Value::ClosureVal(fun_def, env_sptr) => {
+                self.check_call_arity(fun_def.parameters.len(), args.len(), &fun_def.source_loc)?;
                 // Create a new environment, enclosed by closure's environment.
                 let mut new_env = Environment::new(Some(Rc::clone(&env_sptr)));
                 // Bind parameters to argument values.
-                for (parameter, arg) in parameters.iter().zip(args) {
+                for (parameter, arg) in fun_def.parameters.iter().zip(args) {
                     new_env.define(&parameter.name, arg);
                 }
                 // Execute function body in new environment.
                 let new_env_sptr = Rc::new(RefCell::new(new_env));
-                let return_value_result = self.exec_in_env(body.as_slice(), new_env_sptr);
+                let return_value_result = self.exec_in_env(fun_def.body.as_slice(), new_env_sptr);
 
                 self.unwrap_return_value(return_value_result)
             }

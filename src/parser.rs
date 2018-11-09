@@ -156,7 +156,9 @@ impl <'a> Parser<'a> {
         self.consume(TokenType::LeftBrace, "Expected left brace after function parameters")?;
         let body = self.finish_block()?;
 
-        Ok(Stmt::Fun(id.to_string(), parameters, body, loc))
+        let fun_def = FunctionDefinition::new(id.to_string(), parameters, body, loc);
+
+        Ok(Stmt::Fun(fun_def))
     }
 
     fn finish_var_declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
