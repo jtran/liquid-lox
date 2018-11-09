@@ -132,7 +132,7 @@ impl Interpreter {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(NumberVal(x1 + x2)),
                             (StringVal(s1), StringVal(s2)) => {
-                                Ok(StringVal(format!("{}{}", s1, s2)))
+                                Ok(StringVal(Rc::new(format!("{}{}", s1.deref(), s2.deref()))))
                             }
                             (StringVal(_), _) => Err(RuntimeError::new(*loc, &format!("expected string but found {} evaluating plus in expression: {:?}", right_type, expr))),
                             (NumberVal(_), _) => Err(RuntimeError::new(*loc, &format!("expected number but found {} evaluating plus in expression: {:?}", right_type, expr))),
@@ -206,7 +206,8 @@ impl Interpreter {
             Expr::LiteralBool(b) => Ok(BoolVal(*b)),
             Expr::LiteralNil => Ok(NilVal),
             Expr::LiteralNumber(x) => Ok(NumberVal(*x)),
-            Expr::LiteralString(s) => Ok(StringVal(s.clone())),
+            // TODO: Should we clone every time we evaluate a literal string?
+            Expr::LiteralString(s) => Ok(StringVal(Rc::new(s.clone()))),
             Expr::Logical(left, LogicalOperator::And, right) => {
                 let left_val = self.evaluate(left)?;
                 if left_val.is_truthy() {
@@ -396,7 +397,7 @@ mod tests {
     #[test]
     fn test_eval_literals() {
         assert_eq!(eval("42"), Ok(NumberVal(42.0)));
-        assert_eq!(eval("\"hello\""), Ok(StringVal("hello".to_string())));
+        assert_eq!(eval("\"hello\""), Ok(StringVal(Rc::new("hello".to_string()))));
         assert_eq!(eval("true"), Ok(BoolVal(true)));
         assert_eq!(eval("false"), Ok(BoolVal(false)));
         assert_eq!(eval("nil"), Ok(NilVal));
@@ -405,7 +406,7 @@ mod tests {
     #[test]
     fn test_eval_binary_ops() {
         assert_eq!(eval("40 + 2"), Ok(NumberVal(42.0)));
-        assert_eq!(eval("\"foo\" + \"bar\""), Ok(StringVal("foobar".to_string())));
+        assert_eq!(eval("\"foo\" + \"bar\""), Ok(StringVal(Rc::new("foobar".to_string()))));
         assert_eq!(eval("40 - 10"), Ok(NumberVal(30.0)));
         assert_eq!(eval("7 * 3"), Ok(NumberVal(21.0)));
         assert_eq!(eval("10 / 2"), Ok(NumberVal(5.0)));
@@ -445,7 +446,7 @@ mod tests {
     #[test]
     fn test_interpret_operators() {
         assert_eq!(interpret("40 + 2;"), Ok(NumberVal(42.0)));
-        assert_eq!(interpret("\"foo\" + \"bar\";"), Ok(StringVal("foobar".into())));
+        assert_eq!(interpret("\"foo\" + \"bar\";"), Ok(StringVal(Rc::new("foobar".into()))));
     }
 
     #[test]
@@ -573,7 +574,7 @@ mod tests {
                 show();
                 var x = \"local\";
                 show();
-            }"), Ok(StringVal("global".to_string())));
+            }"), Ok(StringVal(Rc::new("global".to_string()))));
     }
 
     #[test]

@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::fmt;
+use std::ops::Deref;
 use std::rc::Rc;
 
 use ast::*;
@@ -15,7 +16,7 @@ pub enum Value {
     NativeFunctionVal(NativeFunctionId),
     NilVal,
     NumberVal(f64),
-    StringVal(String),
+    StringVal(Rc<String>),
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -52,7 +53,7 @@ impl Value {
             (NativeFunctionVal(id1), NativeFunctionVal(id2)) => id1 == id2,
             (NilVal, NilVal) => true,
             (NumberVal(x1), NumberVal(x2)) => x1 == x2,
-            (StringVal(s1), StringVal(s2)) => s1 == s2,
+            (StringVal(s1), StringVal(s2)) => s1.deref() == s2.deref(),
             (_, _) => false,
         }
     }
@@ -76,7 +77,7 @@ impl Value {
             NativeFunctionVal(id) => format!("<native fn {}>", id),
             NilVal => "nil".into(),
             NumberVal(x) => format!("{}", x),
-            StringVal(s) => s.clone(),
+            StringVal(s) => s.deref().clone(),
         }
     }
 }
@@ -99,7 +100,7 @@ impl fmt::Display for Value {
             NativeFunctionVal(id) => write!(f, "{}", id),
             NilVal => write!(f, "nil"),
             NumberVal(x) => write!(f, "{}", x),
-            StringVal(s) => write!(f, "\"{}\"", s),
+            StringVal(s) => write!(f, "\"{}\"", s.deref()),
         }
     }
 }
@@ -207,6 +208,6 @@ mod tests {
 
     #[test]
     fn test_size_of_value() {
-        assert_eq!(mem::size_of::<Value>(), 32);
+        assert_eq!(mem::size_of::<Value>(), 24);
     }
 }
