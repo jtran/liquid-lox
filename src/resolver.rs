@@ -23,12 +23,20 @@ pub fn resolve_expression(expression: &mut Expr) -> Result<(), ParseErrorCause> 
 #[derive(Clone, Debug)]
 pub struct Resolver {
     scopes: Vec<HashMap<String, bool>>,
+    function_type: FunctionType,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum FunctionType {
+    NoFunction,
+    Plain,
 }
 
 impl Resolver {
     pub fn new() -> Resolver {
         let mut resolver = Resolver {
             scopes: Vec::with_capacity(1),
+            function_type: FunctionType::NoFunction,
         };
 
         // Start with the global scope.
@@ -64,6 +72,31 @@ impl Resolver {
             }
             Stmt::Break(_) => Ok(()),
             Stmt::Expression(expr) => self.resolve_expression(expr),
+            Stmt::Fun(name, parameters, body, _) => {
+                self.define(name);
+
+                // Track that we're in a function.
+                let enclosing_func_type = self.function_type;
+                self.function_type = FunctionType::Plain;
+
+                self.begin_scope();
+                for parameter in parameters {
+                    self.define(&parameter.name);
+                }
+                let mut result = Ok(());
+                for body_statement in body {
+                    result = self.resolve_statement(body_statement);
+                    if result.is_err() {
+                        break;
+                    }
+                }
+                self.end_scope();
+
+                // Restore previous function type.
+                self.function_type = enclosing_func_type;
+
+                result
+            }
             Stmt::If(condition, then_stmt, else_stmt_opt) => {
                 self.resolve_expression(condition)?;
                 self.resolve_statement(then_stmt)?;
@@ -74,6 +107,13 @@ impl Resolver {
                 Ok(())
             }
             Stmt::Print(expr) => self.resolve_expression(expr),
+            Stmt::Return(expr, loc) => {
+                if self.function_type != FunctionType::Plain {
+                    return Err(ParseErrorCause::new(*loc, "Found return statement outside of function body"));
+                }
+
+                self.resolve_expression(expr)
+            }
             Stmt::Var(name, expr) => {
                 self.declare(name);
                 self.resolve_expression(expr)?;

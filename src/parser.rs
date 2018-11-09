@@ -95,10 +95,68 @@ impl <'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
-        match self.matches(&vec![TokenType::Var]) {
+        match self.matches(&vec![TokenType::Fun, TokenType::Var]) {
             None => self.statement(),
-            Some(_) => self.finish_var_declaration(),
+            Some((TokenType::Fun, _)) => self.finish_fun_declaration(),
+            Some((TokenType::Var, _)) => self.finish_var_declaration(),
+            Some((token_type, loc)) => panic!("declaration: unexpected token type: {:?} loc={:?}", token_type, loc),
         }
+    }
+
+    fn finish_fun_declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
+        // The Fun token has already been consumed.
+        let (id, loc) = match self.peek() {
+            Some(token) => {
+                if token.token_type == TokenType::Identifier {
+                    (token.lexeme, SourceLoc::new(token.line))
+                }
+                else {
+                    return Err(self.new_error("Expected identifier after \"fun\""));
+                }
+            }
+            None => {
+                return Err(self.new_error("Expected identifier after \"fun\""));
+            }
+        };
+        // Consume the identifier.
+        self.advance();
+
+        self.consume(TokenType::LeftParen, "Expected left parenthesis after function name")?;
+        let mut parameters = Vec::new();
+        if ! self.check(TokenType::RightParen) {
+            loop {
+                if parameters.len() >= 8 {
+                    return Err(self.new_error("Function cannot have more than 8 parameters"));
+                }
+
+                let param_name = match self.peek() {
+                    Some(token) => {
+                        if token.token_type == TokenType::Identifier {
+                            token.lexeme
+                        }
+                        else {
+                            return Err(self.new_error("Expected identifier in function parameters"));
+                        }
+                    }
+                    None => {
+                        return Err(self.new_error("Expected identifier in function parameters"));
+                    }
+                };
+                self.advance();
+
+                parameters.push(Parameter::new(param_name.to_string()));
+
+                if ! self.check(TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+        self.consume(TokenType::RightParen, "Expected right parenthesis after function parameters")?;
+
+        self.consume(TokenType::LeftBrace, "Expected left brace after function parameters")?;
+        let body = self.finish_block()?;
+
+        Ok(Stmt::Fun(id.to_string(), parameters, body, loc))
     }
 
     fn finish_var_declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
@@ -135,6 +193,7 @@ impl <'a> Parser<'a> {
                                  TokenType::If,
                                  TokenType::LeftBrace,
                                  TokenType::Print,
+                                 TokenType::Return,
                                  TokenType::While]) {
             None => self.expression_statement(),
             Some((TokenType::Break, loc)) => self.finish_break_statement(loc),
@@ -144,6 +203,7 @@ impl <'a> Parser<'a> {
                 self.finish_block().map(|statements| Stmt::Block(statements))
             }
             Some((TokenType::Print, _)) => self.finish_print_statement(),
+            Some((TokenType::Return, loc)) => self.finish_return_statement(loc),
             Some((TokenType::While, _)) => self.finish_while_statement(),
             Some((token_type, loc)) => panic!("statement: unexpected token type: {:?} loc={:?}", token_type, loc),
         }
@@ -250,6 +310,19 @@ impl <'a> Parser<'a> {
         self.consume(TokenType::Semicolon, "Expected semicolon after print value")?;
 
         Ok(Stmt::Print(expr))
+    }
+
+    fn finish_return_statement(&mut self, loc: SourceLoc) -> Result<Stmt, ParseErrorCause> {
+        // The Return token has already been consumed.
+        let expr = if self.check(TokenType::Semicolon) {
+            Expr::LiteralNil
+        }
+        else {
+            self.expression()?
+        };
+        self.consume(TokenType::Semicolon, "Expected semicolon after return expression")?;
+
+        Ok(Stmt::Return(expr, loc))
     }
 
     fn finish_while_statement(&mut self) -> Result<Stmt, ParseErrorCause> {

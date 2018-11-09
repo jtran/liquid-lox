@@ -1,4 +1,7 @@
+use std::cell::RefCell;
 use std::mem;
+use std::ops::Deref;
+use std::rc::Rc;
 use std::time::SystemTime;
 
 use ast::*;
@@ -7,7 +10,7 @@ use source_loc::*;
 use value::*;
 
 pub struct Interpreter {
-    env: Box<Environment>,
+    env: Rc<RefCell<Environment>>,
 }
 
 impl Interpreter {
@@ -17,7 +20,7 @@ impl Interpreter {
             Value::NativeFunctionVal(NativeFunctionId::Clock));
 
         Interpreter {
-            env: Box::new(globals),
+            env: Rc::new(RefCell::new(globals)),
         }
     }
 
@@ -43,28 +46,19 @@ impl Interpreter {
         match statement {
             Stmt::Block(statements) => {
                 // Create a new environment.
-                let mut env = Box::new(Environment::new(None));
-                let enclosing = mem::replace(&mut self.env, env);
-                self.env.enclosing = Some(enclosing);
+                let new_env = Rc::new(RefCell::new(Environment::new(Some(Rc::clone(&self.env)))));
 
-                // Execute statements.
-                let mut result = Ok(Value::NilVal);
-                for statement in statements {
-                    result = self.exec(statement);
-                    if result.is_err() {
-                        break;
-                    }
-                }
-
-                // Restore previous environment.
-                let enclosing = mem::replace(&mut self.env.enclosing, None)
-                                .expect("interpreter::execute: enclosing should never be empty here");
-                self.env = enclosing;
-
-                result
+                self.exec_in_env(statements.as_slice(), new_env)
             }
             Stmt::Break(loc) => Err(ExecutionInterrupt::Break(*loc)),
             Stmt::Expression(expr) => self.evaluate(expr).map_err(|err| err.into()),
+            Stmt::Fun(name, parameters, body, loc) => {
+                let closure = Value::ClosureVal(name.clone(), parameters.clone(), body.clone(), Rc::clone(&self.env), *loc);
+                let mut env = self.env.deref().borrow_mut();
+                env.define(name, closure);
+
+                Ok(Value::NilVal)
+            }
             Stmt::If(condition, then_stmt, else_stmt) => {
                 let cond_value = self.evaluate(condition)?;
 
@@ -84,21 +78,28 @@ impl Interpreter {
 
                 Ok(Value::NilVal)
             }
+            Stmt::Return(expr, _) => {
+                let value = self.evaluate(expr)?;
+
+                Err(ExecutionInterrupt::Return(value))
+            }
             Stmt::Var(identifier, expr) => {
                 let value = self.evaluate(expr)?;
-                self.env.define(identifier, value);
+                let mut env = self.env.deref().borrow_mut();
+                env.define(identifier, value);
 
                 Ok(Value::NilVal)
             }
             Stmt::While(condition, body) => {
                 while self.evaluate(condition)?.is_truthy() {
-                    match self.exec(body) {
+                    let result = self.exec(body);
+                    match result {
                         Ok(_) => (),
                         Err(ExecutionInterrupt::Break(_)) => break,
-                        Err(ExecutionInterrupt::Error(error)) => {
-                            return Err(error.into());
-                        }
-                    }
+                        // Propagate any other kind of interrupt.
+                        Err(ExecutionInterrupt::Error(_)) |
+                        Err(ExecutionInterrupt::Return(_)) => return result,
+                    };
                 }
 
                 Ok(Value::NilVal)
@@ -111,7 +112,8 @@ impl Interpreter {
         match expr {
             Expr::Assign(id, dist_cell, expr, loc) => {
                 let value = self.evaluate(expr)?;
-                self.env.assign_at(&id, dist_cell.get(), value.clone())
+                let mut env = self.env.deref().borrow_mut();
+                env.assign_at(&id, dist_cell.get(), value.clone())
                     .map_err(|_| {
                         RuntimeError::new(*loc, &format!("Undefined variable: {}", &id))
                     })?;
@@ -194,11 +196,11 @@ impl Interpreter {
             Expr::Call(callee, arguments, loc) => {
                 let callee_val = self.evaluate(callee)?;
                 let mut arg_vals: Vec<Value> = Vec::with_capacity(arguments.len());
-                for (i, arg) in arguments.iter().enumerate() {
-                    arg_vals[i] = self.evaluate(arg)?;
+                for arg_expr in arguments.iter() {
+                    arg_vals.push(self.evaluate(arg_expr)?);
                 }
 
-                self.call(callee_val, arg_vals, *loc)
+                self.eval_call(callee_val, arg_vals, *loc)
             }
             Expr::Grouping(e) => self.evaluate(e),
             Expr::LiteralBool(b) => Ok(BoolVal(*b)),
@@ -224,10 +226,9 @@ impl Interpreter {
                 }
             }
             Expr::Variable(id, dist_cell, loc) => {
-                self.env.get_at(id, dist_cell.get())
-                    // TODO: Don't clone here since it copies strings.  We only
-                    // have a reference to the value, though.
-                    .map(|value| value.clone())
+                let env = self.env.deref().borrow();
+
+                env.get_at(id, dist_cell.get())
                     // In the case that the variable is not in the environment,
                     // generate a runtime error.
                     .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined variable: {}", id)))
@@ -249,22 +250,78 @@ impl Interpreter {
         }
     }
 
-    fn call(&mut self, callee: Value, args: Vec<Value>, loc: SourceLoc)
+    // Executes statements in the given environment.
+    fn exec_in_env<S>(&mut self, statements: &[S], env: Rc<RefCell<Environment>>)
+        -> Result<Value, ExecutionInterrupt>
+        where S: AsRef<Stmt>
+    {
+        // Create a new environment.
+        let enclosing = mem::replace(&mut self.env, env);
+
+        // Execute statements.
+        let mut result = Ok(Value::NilVal);
+        for statement in statements {
+            result = self.exec(statement.as_ref());
+            if result.is_err() {
+                break;
+            }
+        }
+
+        // Restore previous environment.
+        self.env = enclosing;
+
+        result
+    }
+
+    fn eval_call(&mut self, callee: Value, args: Vec<Value>, loc: SourceLoc)
         -> Result<Value, RuntimeError>
     {
         match callee {
             Value::NativeFunctionVal(id) => {
                 let native_function = NativeFunction::new(id);
-                let arity = native_function.arity();
-                let args_len = args.len();
-                if args_len != arity {
-                    return Err(RuntimeError::new(loc, &format!("Function expected {} arguments, but you attempted to call it with {}", arity, args_len)));
-                }
+                self.check_call_arity(native_function.arity(), args.len(), &loc)?;
+
                 let return_value_result = native_function.call(args, loc);
 
-                return_value_result.map_err(|e| e.into())
+                return_value_result
+            }
+            Value::ClosureVal(_, parameters, body, env_sptr, loc) => {
+                self.check_call_arity(parameters.len(), args.len(), &loc)?;
+                // Create a new environment, enclosed by closure's environment.
+                let mut new_env = Environment::new(Some(Rc::clone(&env_sptr)));
+                // Bind parameters to argument values.
+                for (parameter, arg) in parameters.iter().zip(args) {
+                    new_env.define(&parameter.name, arg);
+                }
+                // Execute function body in new environment.
+                let new_env_sptr = Rc::new(RefCell::new(new_env));
+                let return_value_result = self.exec_in_env(body.as_slice(), new_env_sptr);
+
+                self.unwrap_return_value(return_value_result)
             }
             _ => Err(RuntimeError::new(loc, &format!("You can only call functions and classes, but you tried to call: {}", callee))),
+        }
+    }
+
+    fn check_call_arity(&self, arity: usize, num_args: usize, loc: &SourceLoc)
+        -> Result<(), RuntimeError>
+    {
+        if num_args != arity {
+            return Err(RuntimeError::new(*loc, &format!("Function called with wrong number of arguments; expected {} but given {}", arity, num_args)));
+        }
+
+        Ok(())
+    }
+
+    // Given an execution interrupt, unwrap any value from a return statement.
+    fn unwrap_return_value(&self, result: Result<Value, ExecutionInterrupt>)
+        -> Result<Value, RuntimeError>
+    {
+        match result {
+            Err(ExecutionInterrupt::Return(value)) => Ok(value),
+            // In the case that there was no return, discard the result and
+            // return nil.  This disables implicit return values.
+            _ => result.and(Ok(Value::NilVal)).map_err(|e| e.into()),
         }
     }
 }
@@ -478,5 +535,42 @@ mod tests {
         assert_eq!(interpret("
             var t = clock();
             t > 0;"), Ok(BoolVal(true)));
+    }
+
+    #[test]
+    fn test_interpret_function_call() {
+        assert_eq!(interpret("
+            fun succ(x) {
+                return x + 1;
+            }
+            succ(1);"), Ok(NumberVal(2.0)));
+    }
+
+    #[test]
+    fn test_interpret_no_implicit_return_value() {
+        assert_eq!(interpret("
+            fun do(x) {
+                x + 1;
+            }
+            do(1);"), Ok(NilVal));
+    }
+
+    #[test]
+    fn test_interpret_scope_resolved() {
+        assert_eq!(interpret("
+            var x = \"global\";
+            {
+                fun show() {
+                    return x;
+                }
+                show();
+                var x = \"local\";
+                show();
+            }"), Ok(StringVal("global".to_string())));
+    }
+
+    #[test]
+    fn test_interpret_top_level_return() {
+        assert_eq!(interpret("1 + 2;\nreturn;"), Err(RuntimeError::new(SourceLoc::new(2), "parse error: Found return statement outside of function body")));
     }
 }

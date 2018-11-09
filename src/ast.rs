@@ -7,8 +7,10 @@ pub enum Stmt {
     Block(Vec<Stmt>),
     Break(SourceLoc),
     Expression(Expr),
+    Fun(String, Vec<Parameter>, Vec<Stmt>, SourceLoc),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
+    Return(Expr, SourceLoc),
     Var(String, Expr),
     While(Expr, Box<Stmt>),
 }
@@ -26,6 +28,11 @@ pub enum Expr {
     Logical(Box<Expr>, LogicalOperator, Box<Expr>),
     Variable(String, Cell<usize>, SourceLoc),
     Unary(UnaryOperator, Box<Expr>, SourceLoc),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Parameter {
+    pub name: String,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -53,4 +60,18 @@ pub enum BinaryOperator {
 pub enum LogicalOperator {
     And,
     Or,
+}
+
+impl AsRef<Stmt> for Stmt {
+    fn as_ref(&self) -> &Self {
+        self
+    }
+}
+
+impl Parameter {
+    pub fn new(name: String) -> Parameter {
+        Parameter {
+            name,
+        }
+    }
 }

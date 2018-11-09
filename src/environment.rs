@@ -1,12 +1,15 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::ops::Deref;
+use std::rc::Rc;
 
 use value::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Environment {
     values: HashMap<String, Value>,
-    pub enclosing: Option<Box<Environment>>,
+    pub enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
 impl Default for Environment {
@@ -19,7 +22,7 @@ impl Default for Environment {
 }
 
 impl Environment {
-    pub fn new(enclosing: Option<Box<Environment>>) -> Environment {
+    pub fn new(enclosing: Option<Rc<RefCell<Environment>>>) -> Environment {
         Environment {
             enclosing,
             ..Default::default()
@@ -30,51 +33,47 @@ impl Environment {
         self.values.insert(key.to_string(), value);
     }
 
-    pub fn get_at(&self, key: &str, distance: usize) -> Option<&Value> {
-        match self.ancestor(distance) {
-            None => panic!("tried to look up a variable at a distance greater than exists: {} distance={}", key, distance),
-            Some(env) => env.values.get(key),
+    pub fn get_at(&self, key: &str, distance: usize) -> Option<Value> {
+        if distance == 0 {
+            // TODO: Don't clone here since it copies strings.  We only have a
+            // reference to the value, though.  We cannot change the return type
+            // to be a reference because that conflicts with getting enclosing
+            // environments.
+            return self.values.get(key).map(|v| v.clone());
+        }
+
+        // TODO: implement this without recursion.
+        match self.enclosing {
+            None => panic!("tried to look up a variable at a distance greater than exists: {}", key),
+            Some(ref env_cell_rc) => {
+                let env = env_cell_rc.deref().borrow();
+
+                env.get_at(key, distance - 1)
+            }
         }
     }
 
     // Returns an error result if the key isn't already defined.
-    pub fn assign_at(&mut self, key: &str, distance: usize, new_value: Value) -> Result<(), ()> {
-        match self.ancestor_mut(distance) {
-            None => panic!("tried to look up a variable at a distance greater than exists: {} distance={}", key, distance),
-            Some(ref mut env) => {
-                // Assign at this level.
-                let entry = env.values.entry(key.to_string())
-                                .and_modify(|old_value| { old_value.clone_from(&new_value); });
-                return match entry {
-                    Entry::Occupied(_) => Ok(()),
-                    Entry::Vacant(_) => Err(()), // Not found.
-                }
-            }
-        };
-    }
-
-    fn ancestor(&self, distance: usize) -> Option<&Environment> {
-        // TODO: implement this without recursion.
+    pub fn assign_at(&mut self, key: &str, distance: usize, new_value: Value)
+        -> Result<(), ()>
+    {
         if distance == 0 {
-            Some(self)
-        }
-        else {
-            match self.enclosing {
-                Some(ref env) => env.ancestor(distance - 1),
-                None => None,
+            // Assign at this level.
+            let entry = self.values.entry(key.to_string())
+                            .and_modify(|old_value| { old_value.clone_from(&new_value); });
+            return match entry {
+                Entry::Occupied(_) => Ok(()),
+                Entry::Vacant(_) => Err(()), // Not found.
             }
         }
-    }
 
-    fn ancestor_mut(&mut self, distance: usize) -> Option<&mut Environment> {
         // TODO: implement this without recursion.
-        if distance == 0 {
-            Some(self)
-        }
-        else {
-            match self.enclosing {
-                Some(ref mut env) => env.ancestor_mut(distance - 1),
-                None => None,
+        match self.enclosing {
+            None => panic!("tried to look up a variable at a distance greater than exists: {}", key),
+            Some(ref env_cell_rc) => {
+                let mut env = env_cell_rc.deref().borrow_mut();
+
+                env.assign_at(key, distance - 1, new_value)
             }
         }
     }
