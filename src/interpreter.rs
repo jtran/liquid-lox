@@ -4,10 +4,10 @@ use std::ops::Deref;
 use std::rc::Rc;
 use std::time::SystemTime;
 
-use ast::*;
-use environment::*;
-use source_loc::*;
-use value::*;
+use crate::ast::*;
+use crate::environment::*;
+use crate::source_loc::*;
+use crate::value::*;
 
 pub struct Interpreter {
     env: Rc<RefCell<Environment>>,
@@ -108,7 +108,7 @@ impl Interpreter {
     }
 
     pub fn evaluate(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
-        use value::Value::*;
+        use crate::value::Value::*;
         match expr {
             Expr::Assign(id, dist_cell, expr, loc) => {
                 let value = self.evaluate(expr)?;
@@ -366,9 +366,9 @@ impl NativeFunction {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use parser::*;
-    use resolver;
-    use value::Value::*;
+    use crate::parser::*;
+    use crate::resolver;
+    use crate::value::Value::*;
 
     fn interpret(code: &str) -> Result<Value, RuntimeError> {
         let mut ast = parse(code)?;

@@ -3,11 +3,11 @@ use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use ast::*;
-use environment::*;
-use parser::ParseError;
-use source_loc::*;
-use util;
+use crate::ast::*;
+use crate::environment::*;
+use crate::parser::ParseError;
+use crate::source_loc::*;
+use crate::util;
 
 #[derive(Clone, PartialEq)]
 pub enum Value {

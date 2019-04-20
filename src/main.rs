@@ -19,9 +19,9 @@ use std::io;
 use std::io::prelude::*;
 use std::process;
 
-use interpreter::*;
-use parser::*;
-use value::*;
+use crate::interpreter::*;
+use crate::parser::*;
+use crate::value::*;
 
 enum RunError {
     RunParseError(ParseError),

@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use source_loc::*;
+use crate::source_loc::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {

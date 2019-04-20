@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use ast::*;
-use parser::ParseErrorCause;
+use crate::ast::*;
+use crate::parser::ParseErrorCause;
 
 pub fn resolve(statements: &mut Vec<Stmt>) -> Result<(), ParseErrorCause> {
     let mut resolver = Resolver::new();

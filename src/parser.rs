@@ -1,9 +1,9 @@
 use std::cell::Cell;
 
-use ast::*;
-use scanner::Scanner;
-use source_loc::*;
-use token::*;
+use crate::ast::*;
+use crate::scanner::Scanner;
+use crate::source_loc::*;
+use crate::token::*;
 
 pub fn parse(source: &str) -> Result<Vec<Stmt>, ParseError> {
     let mut scanner = Scanner::new(source);
@@ -752,8 +752,8 @@ impl From<ParseErrorCause> for ParseError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ast::Expr::*;
-    use scanner::*;
+    use crate::ast::Expr::*;
+    use crate::scanner::*;
 
     #[test]
     fn test_parse_literal() {

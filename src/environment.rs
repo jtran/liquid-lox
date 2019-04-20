@@ -4,7 +4,7 @@ use std::collections::hash_map::Entry;
 use std::ops::Deref;
 use std::rc::Rc;
 
-use value::*;
+use crate::value::*;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment {

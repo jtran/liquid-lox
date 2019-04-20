@@ -3,13 +3,13 @@ use unicode_segmentation::{GraphemeIndices, UnicodeSegmentation};
 use std::collections::HashMap;
 use std::iter::Peekable;
 use std::mem;
-use token::*;
-use util;
+use crate::token::*;
+use crate::util;
 
 lazy_static! {
     static ref KEYWORDS: HashMap<&'static str, TokenType> = {
         let mut m = HashMap::new();
-        use token::TokenType::*;
+        use crate::token::TokenType::*;
         m.insert("and", And);
         m.insert("break", Break);
         m.insert("class", Class);
@@ -72,7 +72,7 @@ impl <'source, 'g> Scanner<'source, 'g> where 'source: 'g {
         match self.advance() {
             None => (),
             Some((_, grapheme_cluster)) => {
-                use token::TokenType::*;
+                use crate::token::TokenType::*;
                 match grapheme_cluster {
                     "(" => self.add_token(LeftParen),
                     ")" => self.add_token(RightParen),
