@@ -350,9 +350,9 @@ impl NativeFunction {
 
                 match sys_time.duration_since(SystemTime::UNIX_EPOCH) {
                     Ok(duration) => {
-                        let secs = duration.as_secs() as u128;
-                        let millis = duration.subsec_millis() as u128;
-                        let combined_millis = secs * MILLIS_PER_SEC as u128 + millis;
+                        let secs = u128::from(duration.as_secs());
+                        let millis = u128::from(duration.subsec_millis());
+                        let combined_millis = secs * u128::from(MILLIS_PER_SEC) + millis;
 
                         Ok(Value::NumberVal(combined_millis as f64 / 1000.0))
                     }

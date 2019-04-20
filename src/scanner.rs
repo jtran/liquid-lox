@@ -278,7 +278,7 @@ impl <'source, 'g> Scanner<'source, 'g> where 'source: 'g {
         }
 
         let value = &self.source[self.start..self.peek_index()];
-        let number: f64 = value.parse().expect(&format!("Unable to parse string as f64: {}", value));
+        let number: f64 = value.parse().unwrap_or_else(|_| panic!("Unable to parse string as f64: {}", value));
         self.add_number_literal_token(number);
     }
 

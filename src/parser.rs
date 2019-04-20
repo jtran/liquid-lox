@@ -95,7 +95,7 @@ impl <'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
-        match self.matches(&vec![TokenType::Fun, TokenType::Var]) {
+        match self.matches(&[TokenType::Fun, TokenType::Var]) {
             None => self.statement(),
             Some((TokenType::Fun, _)) => self.finish_fun_declaration(),
             Some((TokenType::Var, _)) => self.finish_var_declaration(),
@@ -179,7 +179,7 @@ impl <'a> Parser<'a> {
         // Consume the identifier.
         self.advance();
 
-        let expr = match self.matches(&vec![TokenType::Equal]) {
+        let expr = match self.matches(&[TokenType::Equal]) {
             None => Expr::LiteralNil,
             Some(_) => self.expression()?,
         };
@@ -190,13 +190,13 @@ impl <'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseErrorCause> {
-        match self.matches(&vec![TokenType::Break,
-                                 TokenType::For,
-                                 TokenType::If,
-                                 TokenType::LeftBrace,
-                                 TokenType::Print,
-                                 TokenType::Return,
-                                 TokenType::While]) {
+        match self.matches(&[TokenType::Break,
+                             TokenType::For,
+                             TokenType::If,
+                             TokenType::LeftBrace,
+                             TokenType::Print,
+                             TokenType::Return,
+                             TokenType::While]) {
             None => self.expression_statement(),
             Some((TokenType::Break, loc)) => self.finish_break_statement(loc),
             Some((TokenType::For, _)) => self.finish_for_statement(),
@@ -368,7 +368,7 @@ impl <'a> Parser<'a> {
     fn assignment(&mut self) -> Result<Expr, ParseErrorCause> {
         let expr = self.or()?;
 
-        match self.matches(&vec![TokenType::Equal]) {
+        match self.matches(&[TokenType::Equal]) {
             None => Ok(expr), // Not actually an assignment at all.
             Some((_, loc)) => {
                 // Recurse since this is right associative.
@@ -410,7 +410,7 @@ impl <'a> Parser<'a> {
         let mut expr = self.comparison()?;
 
         loop {
-            match self.matches(&vec![TokenType::BangEqual, TokenType::EqualEqual]) {
+            match self.matches(&[TokenType::BangEqual, TokenType::EqualEqual]) {
                 None => break,
                 Some((operator, loc)) => {
                     let right = self.comparison()?;
@@ -431,10 +431,10 @@ impl <'a> Parser<'a> {
         let mut expr = self.addition()?;
 
         loop {
-            match self.matches(&vec![TokenType::Less,
-                                     TokenType::Greater,
-                                     TokenType::LessEqual,
-                                     TokenType::GreaterEqual]) {
+            match self.matches(&[TokenType::Less,
+                                 TokenType::Greater,
+                                 TokenType::LessEqual,
+                                 TokenType::GreaterEqual]) {
                 None => break,
                 Some((operator, loc)) => {
                     let right = self.addition()?;
@@ -457,7 +457,7 @@ impl <'a> Parser<'a> {
         let mut expr = self.multiplication()?;
 
         loop {
-            match self.matches(&vec![TokenType::Minus, TokenType::Plus]) {
+            match self.matches(&[TokenType::Minus, TokenType::Plus]) {
                 None => break,
                 Some((operator, loc)) => {
                     let right = self.multiplication()?;
@@ -478,7 +478,7 @@ impl <'a> Parser<'a> {
         let mut expr = self.unary()?;
 
         loop {
-            match self.matches(&vec![TokenType::Slash, TokenType::Star]) {
+            match self.matches(&[TokenType::Slash, TokenType::Star]) {
                 None => break,
                 Some((operator, loc)) => {
                     let right = self.unary()?;
@@ -496,7 +496,7 @@ impl <'a> Parser<'a> {
     }
 
     fn unary(&mut self) -> Result<Expr, ParseErrorCause> {
-        match self.matches(&vec![TokenType::Bang, TokenType::Minus]) {
+        match self.matches(&[TokenType::Bang, TokenType::Minus]) {
             None => self.call(),
             Some((operator, loc)) => {
                 let right = self.unary()?;
@@ -515,7 +515,7 @@ impl <'a> Parser<'a> {
         let mut expr = self.primary()?;
 
         loop {
-            match self.matches(&vec![TokenType::LeftParen]) {
+            match self.matches(&[TokenType::LeftParen]) {
                 None => break,
                 Some((_, loc)) => {
                     expr = self.finish_call(expr, loc)?;
@@ -694,7 +694,7 @@ impl <'a> Parser<'a> {
     fn consume(&mut self, token_type: TokenType, error_message: &str)
         -> Result<(), ParseErrorCause>
     {
-        match self.matches(&vec![token_type]) {
+        match self.matches(&[token_type]) {
             Some(_) => Ok(()), // Expected.
             None => Err(self.new_error(error_message)),
         }

@@ -39,7 +39,7 @@ impl Environment {
             // reference to the value, though.  We cannot change the return type
             // to be a reference because that conflicts with getting enclosing
             // environments.
-            return self.values.get(key).map(|v| v.clone());
+            return self.values.get(key).cloned();
         }
 
         // TODO: implement this without recursion.

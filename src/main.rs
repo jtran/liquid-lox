@@ -74,9 +74,9 @@ fn run_repl() {
 
 // Returns true if there was an error running the file.
 fn run_file(file_path: &str) -> bool {
-    let mut file = File::open(file_path).expect(&format!("source file not found: {}", file_path));
+    let mut file = File::open(file_path).unwrap_or_else(|_| panic!("source file not found: {}", file_path));
     let mut contents = String::new();
-    file.read_to_string(&mut contents).expect(&format!("unable to read file: {}", file_path));
+    file.read_to_string(&mut contents).unwrap_or_else(|_| panic!("unable to read file: {}", file_path));
 
     let mut interpreter = Interpreter::new();
     let result = run(&mut interpreter, contents, false);
