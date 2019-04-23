@@ -13,11 +13,12 @@ mod token;
 mod util;
 mod value;
 
-use std::env;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::process;
+
+use argparse::{ArgumentParser, Print, Store};
 
 use crate::interpreter::*;
 use crate::parser::*;
@@ -29,14 +30,22 @@ enum RunError {
 }
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    
-    if args.len() > 2 {
-        print_usage();
-        process::exit(1);
+    let mut script_filename = "".to_string();
+    {
+        let mut ap = ArgumentParser::new();
+        ap.set_description("Lox language interpreter");
+        ap.add_option(
+            &["--version"],
+            Print(env!("CARGO_PKG_VERSION").to_string()),
+            "Show version",
+        );
+        ap.refer(&mut script_filename)
+            .add_argument("script_filename", Store,
+                          "Lox file to execute.  Omit to run an interactive REPL.");
+        ap.parse_args_or_exit();
     }
-    else if args.len() == 2 {
-        let had_runtime_error = run_file(&args[1]);
+    if ! script_filename.is_empty() {
+        let had_runtime_error = run_file(&script_filename);
 
         if had_runtime_error {
             process::exit(70);
@@ -45,10 +54,6 @@ fn main() {
     else {
         run_repl();
     }
-}
-
-fn print_usage() {
-    println!("Usage: lox <source-file>");
 }
 
 fn run_repl() {
