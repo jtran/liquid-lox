@@ -1,7 +1,10 @@
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 
 use crate::ast::*;
+use crate::environment::*;
 use crate::parser::ParseErrorCause;
+use crate::value::*;
 
 pub fn resolve(statements: &mut Vec<Stmt>) -> Result<(), ParseErrorCause> {
     let mut resolver = Resolver::new();
@@ -22,8 +25,14 @@ pub fn resolve_expression(expression: &mut Expr) -> Result<(), ParseErrorCause> 
 // declaration each reference refers to.
 #[derive(Clone, Debug)]
 pub struct Resolver {
-    scopes: Vec<HashMap<String, bool>>,
+    scopes: Vec<HashMap<String, VarResolveState>>,
     function_type: FunctionType,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct VarResolveState {
+    pub frame_index: usize,
+    pub is_defined: bool,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -39,7 +48,15 @@ impl Resolver {
             function_type: FunctionType::NoFunction,
         };
 
-        // Start with the global scope.
+        // Start with the prelude scope.
+        resolver.begin_scope();
+        for native_id in all_native_ids() {
+            resolver.define(&native_id.to_string())
+        }
+
+        // Create a top-level scope.
+        //
+        // Note: this behavior must match the Interpreter.
         resolver.begin_scope();
 
         resolver
@@ -134,8 +151,8 @@ impl Resolver {
         match expression {
             Expr::Assign(identifier, dist_cell, expr, _) => {
                 self.resolve_expression(expr)?;
-                let distance = self.resolve_local_variable(identifier);
-                dist_cell.set(distance);
+                let var_loc = self.resolve_local_variable(identifier);
+                dist_cell.set(var_loc);
 
                 Ok(())
             }
@@ -175,41 +192,48 @@ impl Resolver {
                     let scope = self.scopes.last().expect("Resolver::resolve_expression: last scope to be present");
                     match scope.get(identifier) {
                         None => (),
-                        Some(true) => (),
-                        Some(false) => return Err(ParseErrorCause::new(*loc, &format!("Cannot read local variable in its own initializer: {}", identifier))),
+                        Some(ref resolve_state) => {
+                            if ! resolve_state.is_defined {
+                                return Err(ParseErrorCause::new(*loc, &format!("Cannot read local variable in its own initializer: {}", identifier)));
+                            }
+                        }
                     };
                 }
 
-                let distance = self.resolve_local_variable(identifier);
-                dist_cell.set(distance);
+                let var_loc = self.resolve_local_variable(identifier);
+                dist_cell.set(var_loc);
 
                 Ok(())
             }
         }
     }
 
-    fn resolve_local_variable(&mut self, identifier: &str) -> usize {
+    fn resolve_local_variable(&mut self, identifier: &str) -> VarLoc {
         let len = self.scopes.len();
-        if len == 0 {
-            return 0;
-        }
-
         let mut i = len;
         while i > 0 {
             i -= 1;
 
             let scope = &self.scopes[i];
-            if scope.contains_key(identifier) {
-                let distance = len - 1 - i;
+            match scope.get(identifier) {
+                None => (),
+                Some(resolve_state) => {
+                    let distance = (len - 1 - i) as u16;
 
-                return distance;
+                    return VarLoc::new(distance,
+                                       resolve_state.frame_index as u16);
+                }
             }
         }
 
-        0
+        // Couldn't resolve.  This should turn into a runtime error.
+        VarLoc::unresolved()
     }
 
     fn begin_scope(&mut self) {
+        if self.scopes.len() >= VAR_LOC_MAX_DISTANCE_USIZE {
+            panic!("Too many nested lexical scopes: {}", self.scopes.len());
+        }
         self.scopes.push(HashMap::new());
     }
 
@@ -219,11 +243,32 @@ impl Resolver {
 
     fn declare(&mut self, identifier: &str) {
         let scope = self.scopes.last_mut().expect("Resolver::declare: I'm trying to look up the most-local scope, but there are none");
-        scope.insert(identifier.to_string(), false);
+        let var_resolve_state = VarResolveState {
+            frame_index: scope.len(),
+            is_defined: false,
+        };
+        ensure_scope_index_limit(scope.len());
+        match scope.entry(identifier.to_string()) {
+            entry @ Entry::Vacant(_) => entry.or_insert(var_resolve_state),
+            Entry::Occupied(_) => panic!("Resolver::declare: I'm trying to declare something that's already declared: {}", identifier),
+        };
     }
 
     fn define(&mut self, identifier: &str) {
         let scope = self.scopes.last_mut().expect("Resolver::define: I'm trying to look up the most-local scope, but there are none");
-        scope.insert(identifier.to_string(), true);
+        let var_resolve_state = VarResolveState {
+            frame_index: scope.len(),
+            is_defined: true,
+        };
+        ensure_scope_index_limit(scope.len());
+        scope.entry(identifier.to_string())
+            .and_modify(|mut state| state.is_defined = true )
+            .or_insert(var_resolve_state);
+    }
+}
+
+fn ensure_scope_index_limit(scope_len: usize) {
+    if scope_len >= VAR_LOC_MAX_INDEX_USIZE {
+        panic!("Too many unique identifiers in single lexical scope: {}", scope_len);
     }
 }

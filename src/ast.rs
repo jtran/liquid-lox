@@ -1,6 +1,7 @@
 use std::cell::Cell;
 
 use crate::source_loc::*;
+use crate::environment::VarLoc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
@@ -17,7 +18,7 @@ pub enum Stmt {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
-    Assign(String, Cell<usize>, Box<Expr>, SourceLoc),
+    Assign(String, Cell<VarLoc>, Box<Expr>, SourceLoc),
     Call(Box<Expr>, Vec<Expr>, SourceLoc),
     Binary(Box<Expr>, BinaryOperator, Box<Expr>, SourceLoc),
     Grouping(Box<Expr>),
@@ -26,7 +27,7 @@ pub enum Expr {
     LiteralNil,
     LiteralString(String),
     Logical(Box<Expr>, LogicalOperator, Box<Expr>),
-    Variable(String, Cell<usize>, SourceLoc),
+    Variable(String, Cell<VarLoc>, SourceLoc),
     Unary(UnaryOperator, Box<Expr>, SourceLoc),
 }
 

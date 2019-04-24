@@ -192,6 +192,10 @@ pub enum NativeFunctionId {
     Clock,
 }
 
+pub fn all_native_ids() -> Vec<NativeFunctionId> {
+    vec![NativeFunctionId::Clock]
+}
+
 impl fmt::Display for NativeFunctionId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use self::NativeFunctionId::*;

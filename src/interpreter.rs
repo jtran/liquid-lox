@@ -15,12 +15,18 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        let mut globals = Environment::default();
-        globals.define(&NativeFunctionId::Clock.to_string(),
-            Value::NativeFunctionVal(NativeFunctionId::Clock));
+        let mut prelude = Environment::default();
+        for native_id in all_native_ids() {
+            prelude.define(&native_id.to_string(),
+                           Value::NativeFunctionVal(native_id));
+        }
+        // We need an empty scope so that resolved indexes can start from 0.
+        //
+        // Note: this behavior must match the Resolver.
+        let top_scope = Environment::new(Some(Rc::new(RefCell::new(prelude))));
 
         Interpreter {
-            env: Rc::new(RefCell::new(globals)),
+            env: Rc::new(RefCell::new(top_scope)),
         }
     }
 
@@ -458,6 +464,7 @@ mod tests {
     fn test_interpret_var() {
         assert_eq!(interpret("var x;"), Ok(NilVal));
         assert_eq!(interpret("var x = 1;"), Ok(NilVal));
+        assert_eq!(interpret("var x = x;"), Err(RuntimeError::new(SourceLoc::new(1), "parse error: Cannot read local variable in its own initializer: x")));
     }
 
     #[test]
@@ -465,6 +472,7 @@ mod tests {
         assert_eq!(interpret("var x = 1; x;"), Ok(NumberVal(1.0)));
         assert_eq!(interpret("var x = 1; var y = 3; x = y = 5; x;"), Ok(NumberVal(5.0)));
         assert_eq!(interpret("x;"), Err(RuntimeError::new(SourceLoc::new(1), "Undefined variable: x")));
+        assert_eq!(interpret("var x = 1; y;"), Err(RuntimeError::new(SourceLoc::new(1), "Undefined variable: y")));
     }
 
     #[test]
