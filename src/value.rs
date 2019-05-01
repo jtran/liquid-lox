@@ -8,7 +8,6 @@ use crate::environment::*;
 use crate::field_table::*;
 use crate::parser::ParseError;
 use crate::source_loc::*;
-use crate::util;
 
 #[derive(Clone, PartialEq)]
 pub enum Value {
@@ -58,7 +57,7 @@ impl Value {
                 // Checking environments first since it's a fast pointer
                 // equality.  It also kind of matters that they are the same
                 // environments because they can be mutated.
-                util::same_object::<Rc<_>>(env1, env2) && fun_def1 == fun_def2
+                Rc::ptr_eq(env1, env2) && fun_def1 == fun_def2
             }
             (InstanceVal(instance1), InstanceVal(instance2)) => instance1 == instance2,
             (NativeFunctionVal(id1), NativeFunctionVal(id2)) => id1 == id2,
