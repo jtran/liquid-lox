@@ -4,6 +4,7 @@ extern crate unicode_segmentation;
 
 mod ast;
 mod environment;
+mod field_table;
 mod interpreter;
 mod parser;
 mod resolver;

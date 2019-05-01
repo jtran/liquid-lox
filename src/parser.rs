@@ -96,31 +96,45 @@ impl <'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
-        match self.matches(&[TokenType::Fun, TokenType::Var]) {
+        match self.matches(&[TokenType::Class, TokenType::Fun, TokenType::Var]) {
             None => self.statement(),
+            Some((TokenType::Class, _)) => self.finish_class_declaration(),
             Some((TokenType::Fun, _)) => self.finish_fun_declaration(),
             Some((TokenType::Var, _)) => self.finish_var_declaration(),
             Some((token_type, loc)) => panic!("declaration: unexpected token type: {:?} loc={:?}", token_type, loc),
         }
     }
 
+    fn finish_class_declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
+        // The Class token has already been consumed.
+        let (id, loc) = self.consume_identifier("Expected identifier after \"class\"")?;
+
+        self.consume(TokenType::LeftBrace, "Expected left brace after class name")?;
+        let mut methods = Vec::new();
+        while ! self.check(TokenType::RightBrace) && ! self.is_at_end() {
+            match self.finish_fun_declaration()? {
+                Stmt::Fun(fun_def) => {
+                    methods.push(fun_def);
+                }
+                _ => {
+                    return Err(self.new_error("Expected method definition in class"));
+                }
+            }
+        }
+        self.consume(TokenType::RightBrace, "Expected right brace after class method body")?;
+
+        let class_def = ClassDefinition {
+            name: id,
+            methods,
+            source_loc: loc,
+        };
+
+        Ok(Stmt::Class(class_def))
+    }
+
     fn finish_fun_declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
         // The Fun token has already been consumed.
-        let (id, loc) = match self.peek() {
-            Some(token) => {
-                if token.token_type == TokenType::Identifier {
-                    (token.lexeme, SourceLoc::new(token.line))
-                }
-                else {
-                    return Err(self.new_error("Expected identifier after \"fun\""));
-                }
-            }
-            None => {
-                return Err(self.new_error("Expected identifier after \"fun\""));
-            }
-        };
-        // Consume the identifier.
-        self.advance();
+        let (id, loc) = self.consume_identifier("Expected identifier after \"fun\"")?;
 
         self.consume(TokenType::LeftParen, "Expected left parenthesis after function name")?;
         let mut parameters = Vec::new();
@@ -130,22 +144,9 @@ impl <'a> Parser<'a> {
                     return Err(self.new_error("Function cannot have more than 8 parameters"));
                 }
 
-                let param_name = match self.peek() {
-                    Some(token) => {
-                        if token.token_type == TokenType::Identifier {
-                            token.lexeme
-                        }
-                        else {
-                            return Err(self.new_error("Expected identifier in function parameters"));
-                        }
-                    }
-                    None => {
-                        return Err(self.new_error("Expected identifier in function parameters"));
-                    }
-                };
-                self.advance();
+                let (param_name, _) = self.consume_identifier("Expected identifier in function parameters")?;
 
-                parameters.push(Parameter::new(param_name.to_string()));
+                parameters.push(Parameter::new(param_name));
 
                 if ! self.match_token(TokenType::Comma) {
                     break;
@@ -157,28 +158,14 @@ impl <'a> Parser<'a> {
         self.consume(TokenType::LeftBrace, "Expected left brace after function parameters")?;
         let body = self.finish_block()?;
 
-        let fun_def = FunctionDefinition::new(id.to_string(), parameters, body, loc);
+        let fun_def = FunctionDefinition::new(id, parameters, body, loc);
 
         Ok(Stmt::Fun(fun_def))
     }
 
     fn finish_var_declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
         // Consume the identifier.
-        let id = match self.peek() {
-            Some(token) => {
-                if token.token_type == TokenType::Identifier {
-                    token.lexeme
-                }
-                else {
-                    return Err(self.new_error("Expected identifier after \"var\""));
-                }
-            }
-            None => {
-                return Err(self.new_error("Expected identifier after \"var\""));
-            }
-        };
-        // Consume the identifier.
-        self.advance();
+        let (id, _) = self.consume_identifier("Expected identifier after \"var\"")?;
 
         let expr = match self.matches(&[TokenType::Equal]) {
             None => Expr::LiteralNil,
@@ -187,7 +174,7 @@ impl <'a> Parser<'a> {
 
         self.consume(TokenType::Semicolon, "Expected semicolon after var declaration")?;
 
-        Ok(Stmt::Var(id.to_string(), expr))
+        Ok(Stmt::Var(id, expr))
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseErrorCause> {
@@ -375,12 +362,13 @@ impl <'a> Parser<'a> {
                 // Recurse since this is right associative.
                 let right_expr = self.assignment()?;
 
-                let id = match &expr {
-                    Expr::Variable(id, _, _) => id.clone(),
-                    _ => return Err(self.new_error(&format!("Invalid assignment target; expected identifier, found: {:?}", &expr))),
-                };
-
-                Ok(Expr::Assign(id, Cell::new(VarLoc::default()), Box::new(right_expr), loc))
+                match expr {
+                    Expr::Get(object_expr, property_name, _) =>
+                        Ok(Expr::Set(object_expr, property_name, Box::new(right_expr), loc)),
+                    Expr::Variable(id, _, _) =>
+                        Ok(Expr::Assign(id, Cell::new(VarLoc::default()), Box::new(right_expr), loc)),
+                    _ => Err(self.new_error(&format!("Invalid assignment target; expected identifier, found: {:?}", &expr))),
+                }
             }
         }
     }
@@ -516,11 +504,16 @@ impl <'a> Parser<'a> {
         let mut expr = self.primary()?;
 
         loop {
-            match self.matches(&[TokenType::LeftParen]) {
+            match self.matches(&[TokenType::Dot, TokenType::LeftParen]) {
                 None => break,
-                Some((_, loc)) => {
+                Some((TokenType::Dot, loc)) => {
+                    let (id, _) = self.consume_identifier("Expected property name after \".\"")?;
+                    expr = Expr::Get(Box::new(expr), id, loc);
+                }
+                Some((TokenType::LeftParen, loc)) => {
                     expr = self.finish_call(expr, loc)?;
                 }
+                Some((token_type, loc)) => panic!("call: unexpected token type: {:?} loc={:?}", token_type, loc),
             }
         }
 
@@ -576,7 +569,7 @@ impl <'a> Parser<'a> {
                     }
                 }
             }
-            TokenType::Identifier => {
+            TokenType::Identifier | TokenType::This => {
                 match self.peek() {
                     None => panic!("primary: identifier case: this shouldn't happen"),
                     Some(token) => {
@@ -699,6 +692,31 @@ impl <'a> Parser<'a> {
             Some(_) => Ok(()), // Expected.
             None => Err(self.new_error(error_message)),
         }
+    }
+
+    // Match an identifier and return everything needed to use it.  This is
+    // different from most token types because most don't carry extra
+    // information, like this string, in this case.
+    fn consume_identifier(&mut self, error_message: &str)
+        -> Result<(String, SourceLoc), ParseErrorCause>
+    {
+        let (id, loc) = match self.peek() {
+            Some(token) => {
+                if token.token_type == TokenType::Identifier {
+                    (token.lexeme, SourceLoc::new(token.line))
+                }
+                else {
+                    return Err(self.new_error(error_message));
+                }
+            }
+            None => {
+                return Err(self.new_error(error_message));
+            }
+        };
+        // Consume the identifier.
+        self.advance();
+
+        Ok((id.to_string(), loc))
     }
 }
 

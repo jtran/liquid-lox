@@ -6,6 +6,7 @@ use std::time::SystemTime;
 
 use crate::ast::*;
 use crate::environment::*;
+use crate::field_table::*;
 use crate::source_loc::*;
 use crate::value::*;
 
@@ -57,11 +58,28 @@ impl Interpreter {
                 self.exec_in_env(statements.as_slice(), new_env)
             }
             Stmt::Break(loc) => Err(ExecutionInterrupt::Break(*loc)),
+            Stmt::Class(class_def) => {
+                let mut env = self.env.deref().borrow_mut();
+                let index = env.define(&class_def.name, Value::NilVal);
+                let var_loc = VarLoc::new(0, index);
+
+                let mut methods = FieldTable::new();
+                for method in class_def.methods.iter() {
+                    let closure = Closure(Rc::new(method.clone()), Rc::clone(&self.env));
+                    methods.set(&method.name, Value::ClosureVal(closure));
+                }
+
+                let rt_class = RuntimeClass::new(&class_def.name, methods);
+                env.assign_at(&class_def.name, var_loc, Value::ClassVal(Rc::new(rt_class)))
+                    .map(|_| Value::NilVal )
+                    .map_err(|_| ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
+                                    &format!("Undefined variable for class; this is probably an interpreter bug: {}", class_def.name))))
+            }
             Stmt::Expression(expr) => self.evaluate(expr).map_err(|err| err.into()),
             Stmt::Fun(fun_def) => {
-                let closure = Value::ClosureVal(Rc::new(fun_def.clone()), Rc::clone(&self.env));
+                let closure = Closure(Rc::new(fun_def.clone()), Rc::clone(&self.env));
                 let mut env = self.env.deref().borrow_mut();
-                env.define(&fun_def.name, closure);
+                env.define(&fun_def.name, Value::ClosureVal(closure));
 
                 Ok(Value::NilVal)
             }
@@ -208,6 +226,19 @@ impl Interpreter {
 
                 self.eval_call(callee_val, arg_vals, *loc)
             }
+            Expr::Get(e, property_name, loc) => {
+                let left_val = self.evaluate(e)?;
+
+                match left_val {
+                    Value::InstanceVal(instance_ref) => {
+                        match instance_ref.get(property_name) {
+                            Some(v) => Ok(v),
+                            None => Err(RuntimeError::new(*loc, &format!("Undefined property: {}", property_name))),
+                        }
+                    }
+                    _ => Err(RuntimeError::new(*loc, &format!("Only instances have properties but found {} with type {}", left_val, left_val.runtime_type()))),
+                }
+            }
             Expr::Grouping(e) => self.evaluate(e),
             Expr::LiteralBool(b) => Ok(BoolVal(*b)),
             Expr::LiteralNil => Ok(NilVal),
@@ -230,6 +261,19 @@ impl Interpreter {
                 }
                 else {
                     self.evaluate(right)
+                }
+            }
+            Expr::Set(object_expr, property_name, e, loc) => {
+                let value = self.evaluate(e)?;
+                let left_val = self.evaluate(object_expr)?;
+
+                match left_val {
+                    Value::InstanceVal(mut instance_ref) => {
+                        instance_ref.set(property_name, value.clone());
+
+                        Ok(value)
+                    }
+                    _ => Err(RuntimeError::new(*loc, &format!("Only instances have fields to set but found {} with type {}", left_val, left_val.runtime_type()))),
                 }
             }
             Expr::Variable(id, dist_cell, loc) => {
@@ -292,7 +336,28 @@ impl Interpreter {
 
                 return_value_result
             }
-            Value::ClosureVal(fun_def, env_sptr) => {
+            Value::ClassVal(rt_class) => {
+                let instance_val = Value::InstanceVal(InstanceRef::new(Rc::clone(&rt_class)));
+
+                // Call the initializer.
+                match rt_class.find_method("init") {
+                    None => {
+                        // When no initializer is defined, instantiating should
+                        // take zero arguments.
+                        self.check_call_arity(0, args.len(), &loc)?;
+                    }
+                    Some(Value::ClosureVal(closure)) => {
+                        self.check_call_arity(closure.arity(), args.len(), &loc)?;
+
+                        let bound_method = closure.bind(instance_val.clone());
+                        self.eval_call(Value::ClosureVal(bound_method), args, loc)?;
+                    }
+                    Some(v) => return Err(RuntimeError::new(loc, &format!("The \"init\" property of a class should be a function, but it isn't: {}", v))),
+                };
+
+                Ok(instance_val)
+            }
+            Value::ClosureVal(Closure(fun_def, env_sptr)) => {
                 self.check_call_arity(fun_def.parameters.len(), args.len(), &fun_def.source_loc)?;
                 // Create a new environment, enclosed by closure's environment.
                 let mut new_env = Environment::new(Some(Rc::clone(&env_sptr)));
@@ -588,5 +653,135 @@ mod tests {
     #[test]
     fn test_interpret_top_level_return() {
         assert_eq!(interpret("1 + 2;\nreturn;"), Err(RuntimeError::new(SourceLoc::new(2), "parse error: Found return statement outside of function body")));
+    }
+
+    #[test]
+    fn test_instance_fields_set_get() {
+        assert_eq!(interpret("
+            class Point {
+            }
+            var p = Point();
+            p.x = 1;
+            p.y = 2;
+            p.x + p.y;"), Ok(NumberVal(3.0)));
+    }
+
+    #[test]
+    fn test_instance_get_undefined_field() {
+        assert_eq!(interpret("
+            class Point {
+            }
+            var p = Point();
+            p.x;"), Err(RuntimeError::new(SourceLoc::new(5), "Undefined property: x")));
+    }
+
+    #[test]
+    fn test_instance_method_call() {
+        assert_eq!(interpret("
+            class Computer {
+                answer() {
+                    return 42;
+                }
+            }
+            var c = Computer();
+            c.answer();"), Ok(NumberVal(42.0)));
+    }
+
+    #[test]
+    fn test_instance_access_field_with_this() {
+        assert_eq!(interpret("
+            class Box {
+                result() {
+                    return this.value;
+                }
+            }
+            var b = Box();
+            b.value = 42;
+            b.result();"), Ok(NumberVal(42.0)));
+    }
+
+    #[test]
+    fn test_this_outside_method_body() {
+        assert_eq!(interpret("print this;"), Err(RuntimeError::new(SourceLoc::new(1), "parse error: Cannot use \"this\" outside of method body")));
+        assert_eq!(interpret("fun foo() { return this; }"), Err(RuntimeError::new(SourceLoc::new(1), "parse error: Cannot use \"this\" outside of method body")));
+    }
+
+    #[test]
+    fn test_class_constructor() {
+        assert_eq!(interpret("
+            class Point {
+                init() {
+                    this.x = 0;
+                    this.y = 2;
+                }
+            }
+            var p = Point();
+            p.y;"), Ok(NumberVal(2.0)));
+    }
+
+    #[test]
+    fn test_class_constructor_with_one_parameter() {
+        assert_eq!(interpret("
+            class Box {
+                init(value) {
+                    this.value = value;
+                }
+            }
+            var box = Box(42);
+            box.value;"), Ok(NumberVal(42.0)));
+    }
+
+    #[test]
+    fn test_class_constructor_with_parameters() {
+        assert_eq!(interpret("
+            class Point {
+                init(x, y) {
+                    this.x = x;
+                    this.y = y;
+                }
+            }
+            var p = Point(5, 10);
+            p.x;"), Ok(NumberVal(5.0)));
+    }
+
+    #[test]
+    fn test_class_constructor_checks_zero_arity_when_no_init_defined() {
+        assert_eq!(interpret("
+            class Box {
+            }
+            Box(1000000);"), Err(RuntimeError::new(SourceLoc::new(4), "Function called with wrong number of arguments; expected 0 but given 1")));
+    }
+
+    #[test]
+    fn test_class_constructor_checks_non_zero_arity() {
+        assert_eq!(interpret("
+            class Point {
+                init(x, y) {
+                    this.x = x;
+                    this.y = y;
+                }
+            }
+            Point(5, 10, 1000000);"), Err(RuntimeError::new(SourceLoc::new(8), "Function called with wrong number of arguments; expected 2 but given 3")));
+    }
+
+    #[test]
+    fn test_class_constructor_disallows_return_with_expression() {
+        assert_eq!(interpret("
+            class Box {
+                init() {
+                    return 42;
+                }
+            }"), Err(RuntimeError::new(SourceLoc::new(4), "parse error: Cannot return a value from a class's initializer")));
+    }
+
+    #[test]
+    fn test_class_constructor_allows_return_with_no_expression() {
+        assert_eq!(interpret("
+            class Box {
+                init() {
+                    return;
+                }
+            }
+            nil;"), Ok(NilVal));
     }
 }

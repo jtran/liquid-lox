@@ -39,6 +39,8 @@ pub struct VarResolveState {
 enum FunctionType {
     NoFunction,
     Plain,
+    Initializer,
+    Method,
 }
 
 impl Resolver {
@@ -88,31 +90,35 @@ impl Resolver {
                 result
             }
             Stmt::Break(_) => Ok(()),
-            Stmt::Expression(expr) => self.resolve_expression(expr),
-            Stmt::Fun(fun_def) => {
-                self.define(&fun_def.name);
-
-                // Track that we're in a function.
-                let enclosing_func_type = self.function_type;
-                self.function_type = FunctionType::Plain;
+            Stmt::Class(class_def) => {
+                self.define(&class_def.name);
 
                 self.begin_scope();
-                for parameter in &fun_def.parameters {
-                    self.define(&parameter.name);
-                }
+                self.define("this");
+
                 let mut result = Ok(());
-                for mut body_statement in &mut fun_def.body {
-                    result = self.resolve_statement(&mut body_statement);
+                for method in class_def.methods.iter_mut() {
+                    let fun_type = if method.name == "init" {
+                        FunctionType::Initializer
+                    } else {
+                        FunctionType::Method
+                    };
+
+                    result = self.resolve_function(method, fun_type);
                     if result.is_err() {
                         break;
                     }
                 }
+
                 self.end_scope();
 
-                // Restore previous function type.
-                self.function_type = enclosing_func_type;
-
                 result
+            }
+            Stmt::Expression(expr) => self.resolve_expression(expr),
+            Stmt::Fun(fun_def) => {
+                self.define(&fun_def.name);
+
+                self.resolve_function(fun_def, FunctionType::Plain)
             }
             Stmt::If(condition, then_stmt, else_stmt_opt) => {
                 self.resolve_expression(condition)?;
@@ -125,8 +131,22 @@ impl Resolver {
             }
             Stmt::Print(expr) => self.resolve_expression(expr),
             Stmt::Return(expr, loc) => {
-                if self.function_type != FunctionType::Plain {
-                    return Err(ParseErrorCause::new(*loc, "Found return statement outside of function body"));
+                match self.function_type {
+                    FunctionType::Plain
+                    | FunctionType::Initializer
+                    | FunctionType::Method => (),
+                    _ => return Err(ParseErrorCause::new(*loc, "Found return statement outside of function body")),
+                }
+
+                // TODO: This currently doesn't distinguish between returning
+                // nil and no return value.
+                if self.function_type == FunctionType::Initializer {
+                    match expr {
+                        Expr::LiteralNil => (),
+                        _ => {
+                            return Err(ParseErrorCause::new(*loc, "Cannot return a value from a class's initializer"));
+                        }
+                    }
                 }
 
                 self.resolve_expression(expr)
@@ -170,6 +190,7 @@ impl Resolver {
 
                 Ok(())
             }
+            Expr::Get(expr, _, _) => self.resolve_expression(expr),
             Expr::Grouping(expr) => self.resolve_expression(expr),
             Expr::LiteralBool(_) => Ok(()),
             Expr::LiteralNil => Ok(()),
@@ -181,12 +202,27 @@ impl Resolver {
 
                 Ok(())
             }
+            Expr::Set(object_expr, _, value_expr, _) => {
+                self.resolve_expression(value_expr)?;
+                self.resolve_expression(object_expr)?;
+
+                Ok(())
+            }
             Expr::Unary(_, right, _) => {
                 self.resolve_expression(right)?;
 
                 Ok(())
             }
             Expr::Variable(identifier, dist_cell, loc) => {
+                match self.function_type {
+                    FunctionType::Initializer | FunctionType::Method => (),
+                    _ => {
+                        if identifier == "this" {
+                            return Err(ParseErrorCause::new(*loc, "Cannot use \"this\" outside of method body"));
+                        }
+                    }
+                }
+
                 // Scope to drop the borrow of self.
                 {
                     let scope = self.scopes.last().expect("Resolver::resolve_expression: last scope to be present");
@@ -206,6 +242,32 @@ impl Resolver {
                 Ok(())
             }
         }
+    }
+
+    fn resolve_function(&mut self,
+                        fun_def: &mut FunctionDefinition,
+                        function_type: FunctionType) -> Result<(), ParseErrorCause> {
+        // Track that we're in a function.
+        let enclosing_func_type = self.function_type;
+        self.function_type = function_type;
+
+        self.begin_scope();
+        for parameter in &fun_def.parameters {
+            self.define(&parameter.name);
+        }
+        let mut result = Ok(());
+        for mut body_statement in &mut fun_def.body {
+            result = self.resolve_statement(&mut body_statement);
+            if result.is_err() {
+                break;
+            }
+        }
+        self.end_scope();
+
+        // Restore previous function type.
+        self.function_type = enclosing_func_type;
+
+        result
     }
 
     fn resolve_local_variable(&mut self, identifier: &str) -> VarLoc {

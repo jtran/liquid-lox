@@ -70,9 +70,13 @@ impl Environment {
         }
     }
 
-    pub fn define(&mut self, name: &str, value: Value) {
+    pub fn define(&mut self, name: &str, value: Value) -> u16 {
+        let index = self.values.len();
+
         self.names.push(name.to_string());
         self.values.push(value);
+
+        index as u16
     }
 
     pub fn get_at(&self, error_name: &str, var_loc: VarLoc) -> Option<Value> {

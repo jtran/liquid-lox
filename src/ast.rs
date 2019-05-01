@@ -7,6 +7,7 @@ use crate::environment::VarLoc;
 pub enum Stmt {
     Block(Vec<Stmt>),
     Break(SourceLoc),
+    Class(ClassDefinition),
     Expression(Expr),
     Fun(FunctionDefinition),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
@@ -21,14 +22,23 @@ pub enum Expr {
     Assign(String, Cell<VarLoc>, Box<Expr>, SourceLoc),
     Call(Box<Expr>, Vec<Expr>, SourceLoc),
     Binary(Box<Expr>, BinaryOperator, Box<Expr>, SourceLoc),
+    Get(Box<Expr>, String, SourceLoc),
     Grouping(Box<Expr>),
     LiteralBool(bool),
     LiteralNumber(f64),
     LiteralNil,
     LiteralString(String),
     Logical(Box<Expr>, LogicalOperator, Box<Expr>),
+    Set(Box<Expr>, String, Box<Expr>, SourceLoc),
     Variable(String, Cell<VarLoc>, SourceLoc),
     Unary(UnaryOperator, Box<Expr>, SourceLoc),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ClassDefinition {
+    pub name: String,
+    pub methods: Vec<FunctionDefinition>,
+    pub source_loc: SourceLoc,
 }
 
 #[derive(Clone, Debug, PartialEq)]
