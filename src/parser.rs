@@ -147,7 +147,7 @@ impl <'a> Parser<'a> {
 
                 parameters.push(Parameter::new(param_name.to_string()));
 
-                if ! self.check(TokenType::Comma) {
+                if ! self.match_token(TokenType::Comma) {
                     break;
                 }
             }
