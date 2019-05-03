@@ -27,6 +27,7 @@ pub fn resolve_expression(expression: &mut Expr) -> Result<(), ParseErrorCause> 
 pub struct Resolver {
     scopes: Vec<HashMap<String, VarResolveState>>,
     function_type: FunctionType,
+    class_type: ClassType,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -43,11 +44,19 @@ enum FunctionType {
     Method,
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum ClassType {
+    NoClass,
+    PlainClass,
+    Subclass,
+}
+
 impl Resolver {
     pub fn new() -> Resolver {
         let mut resolver = Resolver {
             scopes: Vec::with_capacity(1),
             function_type: FunctionType::NoFunction,
+            class_type: ClassType::NoClass,
         };
 
         // Start with the prelude scope.
@@ -91,26 +100,18 @@ impl Resolver {
             }
             Stmt::Break(_) => Ok(()),
             Stmt::Class(class_def) => {
-                self.define(&class_def.name);
+                // Track that we're in a class.
+                let enclosing_class_type = self.class_type;
+                self.class_type = if class_def.has_superclass() {
+                    ClassType::Subclass
+                } else {
+                    ClassType::PlainClass
+                };
 
-                self.begin_scope();
-                self.define("this");
+                let result = self.resolve_class(class_def);
 
-                let mut result = Ok(());
-                for method in class_def.methods.iter_mut() {
-                    let fun_type = if method.name == "init" {
-                        FunctionType::Initializer
-                    } else {
-                        FunctionType::Method
-                    };
-
-                    result = self.resolve_function(method, fun_type);
-                    if result.is_err() {
-                        break;
-                    }
-                }
-
-                self.end_scope();
+                // Restore previous class type.
+                self.class_type = enclosing_class_type;
 
                 result
             }
@@ -208,6 +209,26 @@ impl Resolver {
 
                 Ok(())
             }
+            Expr::Super(super_dist_cell, _, loc) => {
+                match self.class_type {
+                    ClassType::PlainClass | ClassType::Subclass => (),
+                    _ => {
+                        return Err(ParseErrorCause::new(*loc, "Cannot use \"super\" outside of a class"));
+                    }
+                }
+
+                match self.class_type {
+                    ClassType::Subclass => (),
+                    _ => {
+                        return Err(ParseErrorCause::new(*loc, "Cannot use \"super\" in class without a superclass"));
+                    }
+                }
+
+                let super_var_loc = self.resolve_local_variable("super");
+                super_dist_cell.set(super_var_loc);
+
+                Ok(())
+            }
             Expr::Unary(_, right, _) => {
                 self.resolve_expression(right)?;
 
@@ -242,6 +263,58 @@ impl Resolver {
                 Ok(())
             }
         }
+    }
+
+    fn resolve_class(&mut self,
+                     class_def: &mut ClassDefinition) -> Result<(), ParseErrorCause> {
+        self.define(&class_def.name);
+
+        // Superclass.
+        match &class_def.superclass {
+            None => (),
+            Some(Expr::Variable(id, _, loc)) => {
+                if *id == class_def.name {
+                    return Err(ParseErrorCause::new(*loc, "Class cannot inherit from itself"));
+                }
+            }
+            Some(_) => (),
+        }
+        match &mut class_def.superclass {
+            None => (),
+            Some(super_expr) => {
+                self.resolve_expression(super_expr)?;
+
+                self.begin_scope();
+                self.define("super");
+            }
+        }
+
+        self.begin_scope();
+        self.define("this");
+
+        let mut result = Ok(());
+        for method in class_def.methods.iter_mut() {
+            let fun_type = if method.name == "init" {
+                FunctionType::Initializer
+            } else {
+                FunctionType::Method
+            };
+
+            result = self.resolve_function(method, fun_type);
+            if result.is_err() {
+                break;
+            }
+        }
+
+        // "this" scope.
+        self.end_scope();
+
+        // "super" scope.
+        if class_def.superclass.is_some() {
+            self.end_scope();
+        }
+
+        result
     }
 
     fn resolve_function(&mut self,

@@ -31,6 +31,14 @@ impl VarLoc {
     pub fn unresolved() -> VarLoc {
         VarLoc::default()
     }
+
+    pub fn distance(&self) -> u16 {
+        self.distance
+    }
+
+    pub fn index(&self) -> u16 {
+        self.index
+    }
 }
 
 impl Default for VarLoc {

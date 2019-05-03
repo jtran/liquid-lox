@@ -53,15 +53,44 @@ impl Interpreter {
         match statement {
             Stmt::Block(statements) => {
                 // Create a new environment.
-                let new_env = Rc::new(RefCell::new(Environment::new(Some(Rc::clone(&self.env)))));
+                let new_env = Rc::new(RefCell::new(self.new_env_from_current()));
 
                 self.exec_in_env(statements.as_slice(), new_env)
             }
             Stmt::Break(loc) => Err(ExecutionInterrupt::Break(*loc)),
             Stmt::Class(class_def) => {
-                let mut env = self.env.deref().borrow_mut();
-                let index = env.define(&class_def.name, Value::NilVal);
+                let index = {
+                    // Scope is to end mutable borrow of self.
+                    let mut env = self.env.deref().borrow_mut();
+
+                    env.define(&class_def.name, Value::NilVal)
+                };
                 let var_loc = VarLoc::new(0, index);
+
+                // Superclass.
+                let env_before_super = Rc::clone(&self.env);
+                let superclass = match &class_def.superclass {
+                    None => None,
+                    Some(superclass_expr) => {
+                        let superclass_val = self.evaluate(superclass_expr)?;
+
+                        match superclass_val {
+                            Value::ClassVal(ref class) => {
+                                if class.has_superclass() {
+                                    // Define "super".
+                                    let mut new_env = self.new_env_from_current();
+                                    new_env.define("super", superclass_val.clone());
+                                    self.env = Rc::new(RefCell::new(new_env));
+                                }
+
+                                Some(Rc::clone(class))
+                            }
+                            // TODO: Store and use the superclass source location.
+                            _ => return Err(ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
+                                            &format!("Superclass must be a class; instead found: {}", superclass_val)))),
+                        }
+                    }
+                };
 
                 let mut methods = FieldTable::new();
                 for method in class_def.methods.iter() {
@@ -69,7 +98,14 @@ impl Interpreter {
                     methods.set(&method.name, Value::ClosureVal(closure));
                 }
 
-                let rt_class = RuntimeClass::new(&class_def.name, methods);
+                if superclass.is_some() {
+                    self.env = env_before_super;
+                }
+
+                let rt_class = RuntimeClass::new(&class_def.name,
+                                                 superclass,
+                                                 methods);
+                let mut env = self.env.deref().borrow_mut();
                 env.assign_at(&class_def.name, var_loc, Value::ClassVal(Rc::new(rt_class)))
                     .map(|_| Value::NilVal )
                     .map_err(|_| ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
@@ -276,6 +312,35 @@ impl Interpreter {
                     _ => Err(RuntimeError::new(*loc, &format!("Only instances have fields to set but found {} with type {}", left_val, left_val.runtime_type()))),
                 }
             }
+            Expr::Super(super_dist_cell, id, loc) => {
+                let env = self.env.deref().borrow();
+
+                let super_var_loc = super_dist_cell.get();
+                let superclass = match env.get_at("super", super_var_loc) {
+                    // Interpreter bug?
+                    None => return Err(RuntimeError::new(*loc, "Undefined variable: super")),
+                    Some(Value::ClassVal(class)) => class,
+                    Some(_) => return Err(RuntimeError::new(*loc, "super didn't evaluate to a class")),
+                };
+
+                // Instance is always defined one frame before super.
+                let this_dist = match super_var_loc.distance().checked_sub(1) {
+                    Some(x) => x,
+                    None => panic!("location of \"this\" for super expression cannot be computed; probably an interpreter bug; super_var_loc={:?}", super_var_loc),
+                };
+                let this_var_loc = VarLoc::new(this_dist,
+                                               super_var_loc.index());
+                let instance_ref = match env.get_at(id, this_var_loc) {
+                    // Interpreter bug?
+                    None => return Err(RuntimeError::new(*loc, "Undefined variable \"this\" when evaluating super expression")),
+                    Some(Value::InstanceVal(instance_ref)) => instance_ref,
+                    // Interpreter bug?
+                    Some(_) => return Err(RuntimeError::new(*loc, "\"this\" in super expression didn't evaluate to an instance")),
+                };
+
+                superclass.bound_method(id, instance_ref)
+                    .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property: {}", id)))
+            }
             Expr::Variable(id, dist_cell, loc) => {
                 let env = self.env.deref().borrow();
 
@@ -395,6 +460,10 @@ impl Interpreter {
             // return nil.  This disables implicit return values.
             _ => result.and(Ok(Value::NilVal)).map_err(|e| e.into()),
         }
+    }
+
+    fn new_env_from_current(&self) -> Environment {
+        Environment::new(Some(Rc::clone(&self.env)))
     }
 }
 
@@ -783,5 +852,81 @@ mod tests {
                 }
             }
             nil;"), Ok(NilVal));
+    }
+
+    #[test]
+    fn test_class_with_superclass_can_call_super_methods() {
+        assert_eq!(interpret("
+            class Point2 {
+                first() {
+                    return this.x;
+                }
+            }
+            class Point3 < Point2 {
+            }
+            var p = Point3();
+            p.x = 2;
+            p.first();"), Ok(NumberVal(2.0)));
+    }
+
+    #[test]
+    fn test_class_calling_super_from_subclass_method() {
+        assert_eq!(interpret("
+            class Point2 {
+                first() {
+                    return this.x;
+                }
+            }
+            class Point3 < Point2 {
+                second() {
+                    return super.first() + 1;
+                }
+            }
+            var p = Point3();
+            p.x = 2;
+            p.second();"), Ok(NumberVal(3.0)));
+    }
+
+    #[test]
+    fn test_class_inheriting_from_itself() {
+        assert_eq!(interpret("
+            class Box < Box {}
+            "), Err(RuntimeError::new(SourceLoc::new(2), "parse error: Class cannot inherit from itself")));
+    }
+
+    #[test]
+    fn test_class_inheriting_from_non_identifier() {
+        // In the future, we could make arbitrary expressions work.
+        assert_eq!(interpret("
+            class Box < 2 {}
+            "), Err(RuntimeError::new(SourceLoc::new(2), "parse error: Expected identifier after \"<\" in class declaration")));
+    }
+
+    #[test]
+    fn test_class_inheriting_from_non_class() {
+        assert_eq!(interpret("
+            var x = \"not a class\";
+            class Box < x {}
+            "), Err(RuntimeError::new(SourceLoc::new(3), "Superclass must be a class; instead found: \"not a class\"")));
+    }
+
+    #[test]
+    fn test_super_outside_method_body() {
+        assert_eq!(interpret("super.x;"), Err(RuntimeError::new(SourceLoc::new(1), "parse error: Cannot use \"super\" outside of a class")));
+        assert_eq!(interpret("fun foo() { super.x; }"), Err(RuntimeError::new(SourceLoc::new(1), "parse error: Cannot use \"super\" outside of a class")));
+        assert_eq!(interpret("
+            class Box {}
+            fun foo() { super.x; }
+            "), Err(RuntimeError::new(SourceLoc::new(3), "parse error: Cannot use \"super\" outside of a class")));
+    }
+
+    #[test]
+    fn test_super_outside_subclass_method() {
+        assert_eq!(interpret("
+            class Box {
+                foo() {
+                    super.x;
+                }
+            }"), Err(RuntimeError::new(SourceLoc::new(4), "parse error: Cannot use \"super\" in class without a superclass")));
     }
 }

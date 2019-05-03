@@ -30,6 +30,7 @@ pub enum Expr {
     LiteralString(String),
     Logical(Box<Expr>, LogicalOperator, Box<Expr>),
     Set(Box<Expr>, String, Box<Expr>, SourceLoc),
+    Super(Cell<VarLoc>, String, SourceLoc),
     Variable(String, Cell<VarLoc>, SourceLoc),
     Unary(UnaryOperator, Box<Expr>, SourceLoc),
 }
@@ -37,6 +38,7 @@ pub enum Expr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClassDefinition {
     pub name: String,
+    pub superclass: Option<Expr>,
     pub methods: Vec<FunctionDefinition>,
     pub source_loc: SourceLoc,
 }
@@ -84,6 +86,12 @@ pub enum LogicalOperator {
 impl AsRef<Stmt> for Stmt {
     fn as_ref(&self) -> &Self {
         self
+    }
+}
+
+impl ClassDefinition {
+    pub fn has_superclass(&self) -> bool {
+        self.superclass.is_some()
     }
 }
 

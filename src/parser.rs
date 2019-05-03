@@ -109,6 +109,16 @@ impl <'a> Parser<'a> {
         // The Class token has already been consumed.
         let (id, loc) = self.consume_identifier("Expected identifier after \"class\"")?;
 
+        // Optional superclass.
+        let superclass = if self.match_token(TokenType::Less) {
+            let (super_id, super_loc) = self.consume_identifier("Expected identifier after \"<\" in class declaration")?;
+            let super_expr = Expr::Variable(super_id, Cell::new(VarLoc::default()), super_loc);
+
+            Some(super_expr)
+        } else {
+            None
+        };
+
         self.consume(TokenType::LeftBrace, "Expected left brace after class name")?;
         let mut methods = Vec::new();
         while ! self.check(TokenType::RightBrace) && ! self.is_at_end() {
@@ -125,6 +135,7 @@ impl <'a> Parser<'a> {
 
         let class_def = ClassDefinition {
             name: id,
+            superclass,
             methods,
             source_loc: loc,
         };
@@ -588,6 +599,15 @@ impl <'a> Parser<'a> {
 
                 Expr::Grouping(Box::new(expr))
             }
+            TokenType::Super => {
+                self.advance();
+                already_advanced = true;
+
+                self.consume(TokenType::Dot, "Expected \".\" after \"super\"")?;
+                let (id, loc) = self.consume_identifier("Expected superclass method identifier after \"super.\"")?;
+
+                Expr::Super(Cell::new(VarLoc::default()), id, loc)
+            }
             _ => {
                 self.advance();
                 return Err(self.new_error(&format!("Unexpected token: {:?}", token_type)));
@@ -812,6 +832,17 @@ mod tests {
                                                         Cell::new(VarLoc::default()),
                                                         Box::new(LiteralNumber(1.0)),
                                                         SourceLoc::new(1))));
+    }
+
+    #[test]
+    fn test_parse_super_property() {
+        assert_eq!(parse_expression("super.x"), Ok(Super(Cell::new(VarLoc::default()),
+                                                         "x".to_string(),
+                                                         SourceLoc::new(1))));
+        assert_eq!(parse("super.y;"), Ok(vec![Stmt::Expression(
+                                                  Super(Cell::new(VarLoc::default()),
+                                                        "y".to_string(),
+                                                        SourceLoc::new(1)))]));
     }
 
     #[test]

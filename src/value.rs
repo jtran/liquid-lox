@@ -99,19 +99,47 @@ impl Value {
 #[derive(Clone, Debug, PartialEq)]
 pub struct RuntimeClass {
     name: String,
+    superclass: Option<Rc<RuntimeClass>>,
     methods: FieldTable,
 }
 
 impl RuntimeClass {
-    pub fn new(name: &str, methods: FieldTable) -> RuntimeClass {
+    pub fn new(name: &str,
+               superclass: Option<Rc<RuntimeClass>>,
+               methods: FieldTable) -> RuntimeClass {
         RuntimeClass {
             name: name.to_string(),
+            superclass,
             methods,
         }
     }
 
     pub fn find_method(&self, name: &str) -> Option<Value> {
-        self.methods.get(name)
+        let v = self.methods.get(name);
+        if v.is_some() {
+            return v;
+        }
+
+        match &self.superclass {
+            None => None,
+            Some(superclass) => superclass.find_method(name),
+        }
+    }
+
+    pub fn bound_method(&self, name: &str, instance_ref: InstanceRef) -> Option<Value> {
+        match self.find_method(name) {
+            None => None,
+            Some(ClosureVal(cls)) => {
+                let bound_method = cls.bind(Value::InstanceVal(instance_ref));
+
+                Some(Value::ClosureVal(bound_method))
+            }
+            Some(v) => panic!("Accessing a property and looking up a method resulted in a non-closure value: name={}, class={:?}, v={:?}", name, self, v),
+        }
+    }
+
+    pub fn has_superclass(&self) -> bool {
+        self.superclass.is_some()
     }
 }
 
@@ -126,7 +154,7 @@ impl InstanceRef {
     }
 
     pub fn get(&self, name: &str) -> Option<Value> {
-        self.0.borrow().get(name, Rc::clone(&self.0))
+        self.0.borrow().get(name, self.clone())
     }
 
     pub fn set(&mut self, name: &str, new_value: Value) {
@@ -158,22 +186,13 @@ impl Instance {
         }
     }
 
-    pub fn get(&self, name: &str, this_ref: Rc<RefCell<Instance>>) -> Option<Value> {
+    pub fn get(&self, name: &str, this_ref: InstanceRef) -> Option<Value> {
         let v = self.fields.get(name);
         if v.is_some() {
             return v;
         }
 
-        match self.class.find_method(name) {
-            None => (),
-            Some(ClosureVal(cls)) => {
-                let bound_method = cls.bind(Value::InstanceVal(InstanceRef(this_ref)));
-                return Some(Value::ClosureVal(bound_method));
-            }
-            Some(v) => panic!("Accessing a property and looking up a method resulted in a non-closure value: v={:?}, name={}, instance={:?}", v, name, self),
-        }
-
-        None
+        self.class.bound_method(name, this_ref)
     }
 
     pub fn set(&mut self, name: &str, new_value: Value) {
