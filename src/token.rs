@@ -29,7 +29,7 @@ pub struct Token<'a> {
     pub line: usize,
 }
 
-impl <'a> Token<'a> {
+impl<'a> Token<'a> {
     pub fn new(token_type: TokenType,
               lexeme: &'a str,
               string_literal: Option<&'a str>,

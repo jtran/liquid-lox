@@ -1,8 +1,9 @@
-use unicode_segmentation::{GraphemeIndices, UnicodeSegmentation};
-
 use std::collections::HashMap;
 use std::iter::Peekable;
 use std::mem;
+
+use unicode_segmentation::{GraphemeIndices, UnicodeSegmentation};
+
 use crate::token::*;
 use crate::util;
 
@@ -43,7 +44,7 @@ pub struct Scanner<'source, 'g> {
     eof: bool,
 }
 
-impl <'source, 'g> Scanner<'source, 'g> where 'source: 'g {
+impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
     pub fn new(source: &'source str) -> Scanner<'source, 'g> {
         Scanner {
             source,
@@ -61,7 +62,7 @@ impl <'source, 'g> Scanner<'source, 'g> where 'source: 'g {
             // We are at the beginning of the next lexeme.
             self.start = self.peek_index();
             self.scan_token();
-        };
+        }
 
         self.add_token(TokenType::Eof);
 
@@ -153,7 +154,7 @@ impl <'source, 'g> Scanner<'source, 'g> where 'source: 'g {
     fn peek_index(&mut self) -> usize {
         match self.grapheme_indices.peek() {
             None => self.source.len(),
-            Some((i,_)) => *i,
+            Some((i, _)) => *i,
         }
     }
 
@@ -177,7 +178,7 @@ impl <'source, 'g> Scanner<'source, 'g> where 'source: 'g {
     fn is_match(&mut self, expected: &str) -> bool {
         match self.grapheme_indices.peek() {
             None => false,
-            Some((_,grapheme_cluster)) => *grapheme_cluster == expected,
+            Some((_, grapheme_cluster)) => *grapheme_cluster == expected,
         }
     }
 
@@ -219,7 +220,7 @@ impl <'source, 'g> Scanner<'source, 'g> where 'source: 'g {
         while ! self.is_match("\"") && ! self.is_at_end() {
             match self.grapheme_indices.peek() {
                 None => (),
-                Some((_,grapheme_cluster)) => {
+                Some((_, grapheme_cluster)) => {
                     if *grapheme_cluster == "\n" {
                         self.line += 1;
                     }
@@ -343,9 +344,7 @@ fn is_alphabetic(grapheme: &str) -> bool {
     // Only look at the first base character.
     match grapheme.chars().next() {
         None => true,
-        Some(c) => {
-            c.is_alphabetic() || c == '_'
-        }
+        Some(c) => c.is_alphabetic() || c == '_',
     }
 }
 
@@ -353,9 +352,7 @@ fn is_alphanumeric(grapheme: &str) -> bool {
     // Only look at the first base character.
     match grapheme.chars().next() {
         None => true,
-        Some(c) => {
-            c.is_alphanumeric() || c == '_'
-        }
+        Some(c) => c.is_alphanumeric() || c == '_',
     }
 }
 

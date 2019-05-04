@@ -39,7 +39,7 @@ pub struct Parser<'a> {
     allow_trailing_expression: bool,
 }
 
-impl <'a> Parser<'a> {
+impl<'a> Parser<'a> {
     pub fn new(tokens: Vec<Token<'a>>) -> Parser<'a> {
         Parser {
             tokens,
