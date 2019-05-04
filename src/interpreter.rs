@@ -602,6 +602,11 @@ mod tests {
     }
 
     #[test]
+    fn test_interpret_unicode_var_name() {
+        assert_eq!(interpret("var λ = 2; λ;"), Ok(NumberVal(2.0)));
+    }
+
+    #[test]
     fn test_interpret_var_use() {
         assert_eq!(interpret("var x = 1; x;"), Ok(NumberVal(1.0)));
         assert_eq!(interpret("var x = 1; var y = 3; x = y = 5; x;"), Ok(NumberVal(5.0)));
