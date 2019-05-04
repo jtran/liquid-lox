@@ -75,15 +75,15 @@ impl Interpreter {
                         let superclass_val = self.evaluate(superclass_expr)?;
 
                         match superclass_val {
-                            Value::ClassVal(ref class) => {
-                                if class.has_superclass() {
+                            Value::ClassVal(ref class_ref) => {
+                                if class_ref.has_superclass() {
                                     // Define "super".
                                     let mut new_env = self.new_env_from_current();
                                     new_env.define("super", superclass_val.clone());
                                     self.env = Rc::new(RefCell::new(new_env));
                                 }
 
-                                Some(Rc::clone(class))
+                                Some(class_ref.clone())
                             }
                             // TODO: Store and use the superclass source location.
                             _ => return Err(ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
@@ -93,20 +93,28 @@ impl Interpreter {
                 };
 
                 let mut methods = FieldTable::new();
+                let mut class_methods = FieldTable::new();
                 for method in class_def.methods.iter() {
                     let closure = Closure(Rc::new(method.clone()), Rc::clone(&self.env));
-                    methods.set(&method.name, Value::ClosureVal(closure));
+                    let container = if method.fun_type == FunctionType::ClassMethod {
+                        &mut class_methods
+                    }
+                    else {
+                        &mut methods
+                    };
+                    container.set(&method.name, Value::ClosureVal(closure));
                 }
 
                 if superclass.is_some() {
                     self.env = env_before_super;
                 }
 
-                let rt_class = RuntimeClass::new(&class_def.name,
-                                                 superclass,
-                                                 methods);
+                let class_ref = ClassRef::new(&class_def.name,
+                                              superclass,
+                                              class_methods,
+                                              methods);
                 let mut env = self.env.deref().borrow_mut();
-                env.assign_at(&class_def.name, var_loc, Value::ClassVal(Rc::new(rt_class)))
+                env.assign_at(&class_def.name, var_loc, Value::ClassVal(class_ref))
                     .map(|_| Value::NilVal )
                     .map_err(|_| ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
                                     &format!("Undefined variable for class; this is probably an interpreter bug: {}", class_def.name))))
@@ -266,13 +274,19 @@ impl Interpreter {
                 let left_val = self.evaluate(e)?;
 
                 match left_val {
+                    Value::ClassVal(class_ref) => {
+                        match class_ref.get(property_name) {
+                            Some(v) => Ok(v),
+                            None => Err(RuntimeError::new(*loc, &format!("Undefined property: {}", property_name))),
+                        }
+                    }
                     Value::InstanceVal(instance_ref) => {
                         match instance_ref.get(property_name) {
                             Some(v) => Ok(v),
                             None => Err(RuntimeError::new(*loc, &format!("Undefined property: {}", property_name))),
                         }
                     }
-                    _ => Err(RuntimeError::new(*loc, &format!("Only instances have properties but found {} with type {}", left_val, left_val.runtime_type()))),
+                    _ => Err(RuntimeError::new(*loc, &format!("Only instances and classes have properties but found {} with type {}", left_val, left_val.runtime_type()))),
                 }
             }
             Expr::Grouping(e) => self.evaluate(e),
@@ -330,16 +344,21 @@ impl Interpreter {
                 };
                 let this_var_loc = VarLoc::new(this_dist,
                                                super_var_loc.index());
-                let instance_ref = match env.get_at(id, this_var_loc) {
-                    // Interpreter bug?
-                    None => return Err(RuntimeError::new(*loc, "Undefined variable \"this\" when evaluating super expression")),
-                    Some(Value::InstanceVal(instance_ref)) => instance_ref,
-                    // Interpreter bug?
-                    Some(_) => return Err(RuntimeError::new(*loc, "\"this\" in super expression didn't evaluate to an instance")),
-                };
 
-                superclass.bound_method(id, instance_ref)
-                    .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property: {}", id)))
+                match env.get_at(id, this_var_loc) {
+                    // Interpreter bug?
+                    None => Err(RuntimeError::new(*loc, "Undefined variable \"this\" when evaluating super expression")),
+                    Some(Value::ClassVal(class_ref)) => {
+                        superclass.bound_class_method(id, class_ref)
+                            .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property: {}", id)))
+                    }
+                    Some(Value::InstanceVal(instance_ref)) => {
+                        superclass.bound_method(id, instance_ref)
+                            .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property: {}", id)))
+                    }
+                    // Interpreter bug?
+                    Some(_) => Err(RuntimeError::new(*loc, "\"this\" in super expression didn't evaluate to an instance or class")),
+                }
             }
             Expr::Variable(id, dist_cell, loc) => {
                 let env = self.env.deref().borrow();
@@ -401,11 +420,11 @@ impl Interpreter {
 
                 return_value_result
             }
-            Value::ClassVal(rt_class) => {
-                let instance_val = Value::InstanceVal(InstanceRef::new(Rc::clone(&rt_class)));
+            Value::ClassVal(class_ref) => {
+                let instance_val = Value::InstanceVal(InstanceRef::new(class_ref.clone()));
 
                 // Call the initializer.
-                match rt_class.find_method("init") {
+                match class_ref.find_method("init") {
                     None => {
                         // When no initializer is defined, instantiating should
                         // take zero arguments.
@@ -858,6 +877,60 @@ mod tests {
             }
             nil;"), Ok(NilVal));
     }
+
+    #[test]
+    fn test_static_class_method() {
+        assert_eq!(interpret("
+            class Math {
+                class square(x) {
+                    return x * x;
+                }
+            }
+            Math.square(2);"), Ok(NumberVal(4.0)));
+    }
+
+    #[test]
+    fn test_static_class_method_can_access_this() {
+        assert_eq!(interpret("
+            class Math {
+                class square(x) {
+                    return this.impl(x);
+                }
+                class impl(x) {
+                    return x * x;
+                }
+            }
+            Math.square(2);"), Ok(NumberVal(4.0)));
+    }
+
+    #[test]
+    fn test_static_class_method_can_access_super() {
+        assert_eq!(interpret("
+            class Impl {
+                class impl(x) {
+                    return x * x;
+                }
+            }
+            class Math < Impl {
+                class square(x) {
+                    return super.impl(x);
+                }
+            }
+            Math.square(2);"), Ok(NumberVal(4.0)));
+    }
+
+    #[test]
+    fn test_static_class_method_is_not_accessible_from_instance() {
+        assert_eq!(interpret("
+            class Math {
+                class square(x) {
+                    return x * x;
+                }
+            }
+            var m = Math();
+            m.square(2);"), Err(RuntimeError::new(SourceLoc::new(8), "Undefined property: square")));
+    }
+
 
     #[test]
     fn test_class_with_superclass_can_call_super_methods() {

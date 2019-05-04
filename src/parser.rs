@@ -122,8 +122,15 @@ impl <'a> Parser<'a> {
         self.consume(TokenType::LeftBrace, "Expected left brace after class name")?;
         let mut methods = Vec::new();
         while ! self.check(TokenType::RightBrace) && ! self.is_at_end() {
+            let is_class_method = self.match_token(TokenType::Class);
+
             match self.finish_fun_declaration()? {
-                Stmt::Fun(fun_def) => {
+                Stmt::Fun(mut fun_def) => {
+                    fun_def.fun_type = if is_class_method {
+                        FunctionType::ClassMethod
+                    } else {
+                        FunctionType::Method
+                    };
                     methods.push(fun_def);
                 }
                 _ => {
@@ -169,7 +176,9 @@ impl <'a> Parser<'a> {
         self.consume(TokenType::LeftBrace, "Expected left brace after function parameters")?;
         let body = self.finish_block()?;
 
-        let fun_def = FunctionDefinition::new(id, parameters, body, loc);
+        let fun_def = FunctionDefinition::new(id, parameters, body,
+                                              FunctionType::PlainFunction,
+                                              loc);
 
         Ok(Stmt::Fun(fun_def))
     }

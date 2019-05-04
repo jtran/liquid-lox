@@ -48,12 +48,20 @@ pub struct FunctionDefinition {
     pub name: String,
     pub parameters: Vec<Parameter>,
     pub body: Vec<Stmt>,
+    pub fun_type: FunctionType,
     pub source_loc: SourceLoc,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Parameter {
     pub name: String,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum FunctionType {
+    PlainFunction,
+    Method,
+    ClassMethod,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -99,6 +107,7 @@ impl FunctionDefinition {
     pub fn new(name: String,
                parameters: Vec<Parameter>,
                body: Vec<Stmt>,
+               fun_type: FunctionType,
                source_loc: SourceLoc)
         -> FunctionDefinition
     {
@@ -106,6 +115,7 @@ impl FunctionDefinition {
             name,
             parameters,
             body,
+            fun_type,
             source_loc,
         }
     }

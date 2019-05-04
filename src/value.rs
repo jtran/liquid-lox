@@ -12,7 +12,7 @@ use crate::source_loc::*;
 #[derive(Clone, PartialEq)]
 pub enum Value {
     BoolVal(bool),
-    ClassVal(Rc<RuntimeClass>),
+    ClassVal(ClassRef),
     ClosureVal(Closure),
     InstanceVal(InstanceRef),
     NativeFunctionVal(NativeFunctionId),
@@ -50,9 +50,7 @@ impl Value {
     pub fn is_equal(&self, other: &Value) -> bool {
         match (self, other) {
             (BoolVal(b1), BoolVal(b2)) => b1 == b2,
-            (ClassVal(class1), ClassVal(class2)) => {
-                Rc::ptr_eq(class1, class2)
-            }
+            (ClassVal(class1), ClassVal(class2)) => class1 == class2,
             (ClosureVal(Closure(fun_def1, env1)), ClosureVal(Closure(fun_def2, env2))) => {
                 // Checking environments first since it's a fast pointer
                 // equality.  It also kind of matters that they are the same
@@ -85,7 +83,7 @@ impl Value {
         match self {
             BoolVal(true) => "true".into(),
             BoolVal(false) => "false".into(),
-            ClassVal(class_def) => format!("<class {}>", class_def.name),
+            ClassVal(class_ref) => format!("<class {}>", class_ref.name()),
             ClosureVal(Closure(fun_def, _)) => format!("<fn {}>", fun_def.name),
             InstanceVal(instance_ref) => format!("<instance {}>", instance_ref.class_name()),
             NativeFunctionVal(id) => format!("<native fn {}>", id),
@@ -96,22 +94,77 @@ impl Value {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct ClassRef(pub Rc<RuntimeClass>);
+
+impl ClassRef {
+    pub fn new(name: &str,
+               superclass: Option<ClassRef>,
+               class_methods: FieldTable,
+               methods: FieldTable) -> ClassRef {
+        let rt_class = RuntimeClass::new(name, superclass, class_methods, methods);
+
+        ClassRef(Rc::new(rt_class))
+    }
+
+    pub fn get(&self, name: &str) -> Option<Value> {
+        self.0.get(name, self.clone())
+    }
+
+    pub fn find_method(&self, name: &str) -> Option<Value> {
+        self.0.find_method(name)
+    }
+
+    pub fn bound_method(&self, name: &str, instance_ref: InstanceRef) -> Option<Value> {
+        self.0.bound_method(name, instance_ref)
+    }
+
+    pub fn find_class_method(&self, name: &str) -> Option<Value> {
+        self.0.find_class_method(name)
+    }
+
+    pub fn bound_class_method(&self, name: &str, class_ref: ClassRef) -> Option<Value> {
+        self.0.bound_class_method(name, class_ref)
+    }
+
+    pub fn name(&self) -> String {
+        self.0.name.clone()
+    }
+
+    pub fn has_superclass(&self) -> bool {
+        self.0.superclass.is_some()
+    }
+}
+
+impl PartialEq for ClassRef {
+    fn eq(&self, other: &ClassRef) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct RuntimeClass {
     name: String,
-    superclass: Option<Rc<RuntimeClass>>,
+    superclass: Option<ClassRef>,
     methods: FieldTable,
+    class_methods: FieldTable,
 }
 
 impl RuntimeClass {
     pub fn new(name: &str,
-               superclass: Option<Rc<RuntimeClass>>,
+               superclass: Option<ClassRef>,
+               class_methods: FieldTable,
                methods: FieldTable) -> RuntimeClass {
         RuntimeClass {
             name: name.to_string(),
             superclass,
+            class_methods,
             methods,
         }
+    }
+
+    pub fn get(&self, name: &str, this_ref: ClassRef) -> Option<Value> {
+        self.bound_class_method(name, this_ref)
     }
 
     pub fn find_method(&self, name: &str) -> Option<Value> {
@@ -138,8 +191,28 @@ impl RuntimeClass {
         }
     }
 
-    pub fn has_superclass(&self) -> bool {
-        self.superclass.is_some()
+    pub fn find_class_method(&self, name: &str) -> Option<Value> {
+        let v = self.class_methods.get(name);
+        if v.is_some() {
+            return v;
+        }
+
+        match &self.superclass {
+            None => None,
+            Some(superclass) => superclass.find_class_method(name),
+        }
+    }
+
+    pub fn bound_class_method(&self, name: &str, class_ref: ClassRef) -> Option<Value> {
+        match self.find_class_method(name) {
+            None => None,
+            Some(ClosureVal(cls)) => {
+                let bound_method = cls.bind(Value::ClassVal(class_ref));
+
+                Some(Value::ClosureVal(bound_method))
+            }
+            Some(v) => panic!("Accessing a property and looking up a method resulted in a non-closure value: name={}, class={:?}, v={:?}", name, self, v),
+        }
     }
 }
 
@@ -147,7 +220,7 @@ impl RuntimeClass {
 pub struct InstanceRef(pub Rc<RefCell<Instance>>);
 
 impl InstanceRef {
-    pub fn new(class: Rc<RuntimeClass>) -> InstanceRef {
+    pub fn new(class: ClassRef) -> InstanceRef {
         let instance = Instance::new(class);
 
         InstanceRef(Rc::new(RefCell::new(instance)))
@@ -162,7 +235,7 @@ impl InstanceRef {
     }
 
     pub fn class_name(&self) -> String {
-        self.0.borrow().class.name.to_string()
+        self.0.borrow().class.name()
     }
 }
 
@@ -174,12 +247,12 @@ impl PartialEq for InstanceRef {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Instance {
-    class: Rc<RuntimeClass>,
+    class: ClassRef,
     fields: FieldTable,
 }
 
 impl Instance {
-    pub fn new(class: Rc<RuntimeClass>) -> Instance {
+    pub fn new(class: ClassRef) -> Instance {
         Instance {
             class,
             fields: FieldTable::new(),
@@ -224,8 +297,8 @@ impl fmt::Display for Value {
         match self {
             BoolVal(false) => write!(f, "false"),
             BoolVal(true) => write!(f, "true"),
-            ClassVal(class_def) => {
-                write!(f, "class {}{{...}}", class_def.name)
+            ClassVal(class_ref) => {
+                write!(f, "class {}{{...}}", class_ref.name())
             }
             ClosureVal(Closure(fun_def, _)) => {
                 let param_names = fun_def.parameters.iter()
