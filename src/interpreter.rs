@@ -416,9 +416,7 @@ impl Interpreter {
                 let native_function = NativeFunction::new(id);
                 self.check_call_arity(native_function.arity(), args.len(), &loc)?;
 
-                let return_value_result = native_function.call(args, loc);
-
-                return_value_result
+                native_function.call(args, loc)
             }
             Value::ClassVal(class_ref) => {
                 let instance_val = Value::InstanceVal(InstanceRef::new(class_ref.clone()));

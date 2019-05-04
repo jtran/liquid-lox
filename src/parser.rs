@@ -27,9 +27,8 @@ pub fn parse_expression(code: &str) -> Result<Expr, ParseError> {
     let mut scanner = Scanner::new(code);
     let tokens = scanner.scan_tokens();
     let mut parser = Parser::new(tokens);
-    let ast = parser.parse_expression();
 
-    ast
+    parser.parse_expression()
 }
 
 #[derive(Debug)]
