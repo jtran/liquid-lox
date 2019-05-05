@@ -113,7 +113,7 @@ impl<'a> Parser<'a> {
             let (super_id, super_loc) = self.consume_identifier("Expected identifier after \"<\" in class declaration")?;
             let super_expr = Expr::Variable(super_id, Cell::new(VarLoc::default()), super_loc);
 
-            Some(super_expr)
+            Some(Box::new(super_expr))
         } else {
             None
         };

@@ -38,7 +38,7 @@ pub enum Expr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ClassDefinition {
     pub name: String,
-    pub superclass: Option<Expr>,
+    pub superclass: Option<Box<Expr>>,
     pub methods: Vec<FunctionDefinition>,
     pub source_loc: SourceLoc,
 }
@@ -136,7 +136,17 @@ mod tests {
 
     #[test]
     fn test_size_of_stmt() {
-        assert_eq!(mem::size_of::<Stmt>(), 120);
+        assert_eq!(mem::size_of::<Stmt>(), 96);
+    }
+
+    #[test]
+    fn test_size_of_class_definition() {
+        assert_eq!(mem::size_of::<ClassDefinition>(), 64);
+    }
+
+    #[test]
+    fn test_size_of_function_definition() {
+        assert_eq!(mem::size_of::<FunctionDefinition>(), 88);
     }
 
     #[test]

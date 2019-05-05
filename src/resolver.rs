@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
+use std::ops::Deref;
 
 use crate::ast::*;
 use crate::environment::*;
@@ -272,12 +273,16 @@ impl Resolver {
         // Superclass.
         match &class_def.superclass {
             None => (),
-            Some(Expr::Variable(id, _, loc)) => {
-                if *id == class_def.name {
-                    return Err(ParseErrorCause::new(*loc, "Class cannot inherit from itself"));
+            Some(boxed_expr) => {
+                match boxed_expr.deref() {
+                    Expr::Variable(id, _, loc) => {
+                        if *id == class_def.name {
+                            return Err(ParseErrorCause::new(*loc, "Class cannot inherit from itself"));
+                        }
+                    }
+                    _ => (),
                 }
             }
-            Some(_) => (),
         }
         match &mut class_def.superclass {
             None => (),
