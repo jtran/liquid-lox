@@ -119,11 +119,11 @@ fn print_result(result: &Result<Value, RunError>, print_success: bool) {
                 RunError::RunParseError(err) => {
                     // Print all causes.
                     for cause in err.causes.iter() {
-                        util::error(cause.source_loc.line, &cause.message);
+                        util::error(&cause.source_loc, &cause.message);
                     }
                 }
                 RunError::RunRuntimeError(err) => {
-                    util::error(err.source_loc.line, &err.message);
+                    util::error(&err.source_loc, &err.message);
                 }
             }
         }

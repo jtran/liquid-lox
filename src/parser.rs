@@ -133,7 +133,7 @@ impl<'a> Parser<'a> {
                     methods.push(fun_def);
                 }
                 _ => {
-                    return Err(self.new_error("Expected method definition in class"));
+                    return Err(self.error_from_last("Expected method definition in class"));
                 }
             }
         }
@@ -158,7 +158,7 @@ impl<'a> Parser<'a> {
         if ! self.check(TokenType::RightParen) {
             loop {
                 if parameters.len() >= 8 {
-                    return Err(self.new_error("Function cannot have more than 8 parameters"));
+                    return Err(self.error_from_peek("Function cannot have more than 8 parameters"));
                 }
 
                 let (param_name, _) = self.consume_identifier("Expected identifier in function parameters")?;
@@ -221,7 +221,7 @@ impl<'a> Parser<'a> {
     fn finish_break_statement(&mut self, loc: SourceLoc) -> Result<Stmt, ParseErrorCause> {
         // The Break token has already been consumed.
         if self.in_loops == 0 {
-            return Err(self.new_error("Found break statement outside of loop body"));
+            return Err(self.error_from_last("Found break statement outside of loop body"));
         }
         self.consume(TokenType::Semicolon, "Expected semicolon after break")?;
 
@@ -386,7 +386,7 @@ impl<'a> Parser<'a> {
                         Ok(Expr::Set(object_expr, property_name, Box::new(right_expr), loc)),
                     Expr::Variable(id, _, _) =>
                         Ok(Expr::Assign(id, Cell::new(VarLoc::default()), Box::new(right_expr), loc)),
-                    _ => Err(self.new_error(&format!("Invalid assignment target; expected identifier, found: {:?}", &expr))),
+                    _ => Err(self.error_from_last(&format!("Invalid assignment target; expected identifier, found: {:?}", &expr))),
                 }
             }
         }
@@ -545,7 +545,7 @@ impl<'a> Parser<'a> {
         if ! self.check(TokenType::RightParen) {
             loop {
                 if args.len() >= 16 {
-                    return Err(self.new_error("Cannot have more than 16 arguments in a function call"));
+                    return Err(self.error_from_peek("Cannot have more than 16 arguments in a function call"));
                 }
                 args.push(self.expression()?);
 
@@ -592,7 +592,7 @@ impl<'a> Parser<'a> {
                 match self.peek() {
                     None => panic!("primary: identifier case: this shouldn't happen"),
                     Some(token) => {
-                        let loc = SourceLoc::new(token.line);
+                        let loc = SourceLoc::from(token);
 
                         Expr::Variable(token.lexeme.to_string(), Cell::new(VarLoc::default()), loc)
                     }
@@ -608,17 +608,25 @@ impl<'a> Parser<'a> {
                 Expr::Grouping(Box::new(expr))
             }
             TokenType::Super => {
-                self.advance();
-                already_advanced = true;
+                match self.peek() {
+                    None => panic!("primary: super case: this shouldn't happen"),
+                    Some(token) => {
+                        let loc = SourceLoc::from(token);
 
-                self.consume(TokenType::Dot, "Expected \".\" after \"super\"")?;
-                let (id, loc) = self.consume_identifier("Expected superclass method identifier after \"super.\"")?;
+                        self.advance();
+                        already_advanced = true;
 
-                Expr::Super(Cell::new(VarLoc::default()), id, loc)
+                        self.consume(TokenType::Dot, "Expected \".\" after \"super\"")?;
+                        let (id, _) = self.consume_identifier("Expected superclass method identifier after \"super.\"")?;
+
+                        Expr::Super(Cell::new(VarLoc::default()), id, loc)
+                    }
+                }
             }
             _ => {
+                // We need to advance here to prevent looping forever.
                 self.advance();
-                return Err(self.new_error(&format!("Unexpected token: {:?}", token_type)));
+                return Err(self.error_from_last(&format!("Unexpected token: {:?}", token_type)));
             }
         };
 
@@ -650,7 +658,7 @@ impl<'a> Parser<'a> {
             None => None,
             Some(token) => {
                 if token_types.contains(&token.token_type) {
-                    let loc = SourceLoc::new(token.line);
+                    let loc = SourceLoc::from(token);
 
                     Some((token.token_type, loc))
                 }
@@ -682,26 +690,35 @@ impl<'a> Parser<'a> {
         self.tokens.get(self.current - 1)
     }
 
-    fn peek_line(&self) -> usize {
+    fn previous_source_loc(&self) -> SourceLoc {
+        match self.previous() {
+            Some(token) => SourceLoc::from(token),
+            // If there was no last token, this is an edge case where
+            // there were no tokens.
+            None => SourceLoc::default(),
+        }
+    }
+
+    fn peek_source_loc(&self) -> SourceLoc {
         match self.peek() {
-            Some(token) => token.line,
+            Some(token) => SourceLoc::from(token),
             None => {
                 // We're at the end of file, so use the line of the last token.
                 match self.previous() {
-                    Some(token) => token.line,
+                    Some(token) => SourceLoc::from(token),
                     // If there was no last token, this is an edge case where
                     // there were no tokens.
-                    None => 1,
+                    None => SourceLoc::default(),
                 }
             }
         }
     }
 
-    fn peek_source_loc(&self) -> SourceLoc {
-        SourceLoc::new(self.peek_line())
+    fn error_from_last(&self, message: &str) -> ParseErrorCause {
+        ParseErrorCause::new(self.previous_source_loc(), message)
     }
 
-    fn new_error(&self, message: &str) -> ParseErrorCause {
+    fn error_from_peek(&self, message: &str) -> ParseErrorCause {
         ParseErrorCause::new(self.peek_source_loc(), message)
     }
 
@@ -718,7 +735,7 @@ impl<'a> Parser<'a> {
     {
         match self.matches(&[token_type]) {
             Some(_) => Ok(()), // Expected.
-            None => Err(self.new_error(error_message)),
+            None => Err(self.error_from_last(error_message)),
         }
     }
 
@@ -731,14 +748,14 @@ impl<'a> Parser<'a> {
         let (id, loc) = match self.peek() {
             Some(token) => {
                 if token.token_type == TokenType::Identifier {
-                    (token.lexeme, SourceLoc::new(token.line))
+                    (token.lexeme, SourceLoc::from(token))
                 }
                 else {
-                    return Err(self.new_error(error_message));
+                    return Err(self.error_from_peek(error_message));
                 }
             }
             None => {
-                return Err(self.new_error(error_message));
+                return Err(self.error_from_peek(error_message));
             }
         };
         // Consume the identifier.
@@ -816,17 +833,17 @@ mod tests {
         assert_eq!(parse_expression("40 + 2"), Ok(Binary(Box::new(LiteralNumber(40.0)),
                                                          BinaryOperator::Plus,
                                                          Box::new(LiteralNumber(2.0)),
-                                                         SourceLoc::new(1))));
+                                                         SourceLoc::new(1, 4))));
     }
 
     #[test]
     fn test_parse_unary_op() {
         assert_eq!(parse_expression("-42"), Ok(Unary(UnaryOperator::Minus,
                                                      Box::new(LiteralNumber(42.0)),
-                                                     SourceLoc::new(1))));
+                                                     SourceLoc::new(1, 1))));
         assert_eq!(parse_expression("!true"), Ok(Unary(UnaryOperator::Not,
                                                        Box::new(LiteralBool(true)),
-                                                       SourceLoc::new(1))));
+                                                       SourceLoc::new(1, 1))));
     }
 
     #[test]
@@ -839,18 +856,18 @@ mod tests {
         assert_eq!(parse_expression("x = 1"), Ok(Assign("x".to_string(),
                                                         Cell::new(VarLoc::default()),
                                                         Box::new(LiteralNumber(1.0)),
-                                                        SourceLoc::new(1))));
+                                                        SourceLoc::new(1, 3))));
     }
 
     #[test]
     fn test_parse_super_property() {
         assert_eq!(parse_expression("super.x"), Ok(Super(Cell::new(VarLoc::default()),
                                                          "x".to_string(),
-                                                         SourceLoc::new(1))));
+                                                         SourceLoc::new(1, 1))));
         assert_eq!(parse("super.y;"), Ok(vec![Stmt::Expression(
                                                   Super(Cell::new(VarLoc::default()),
                                                         "y".to_string(),
-                                                        SourceLoc::new(1)))]));
+                                                        SourceLoc::new(1, 1)))]));
     }
 
     #[test]
@@ -864,15 +881,15 @@ mod tests {
                                   Box::new(Binary(Box::new(LiteralNumber(40.0)),
                                                   BinaryOperator::Plus,
                                                   Box::new(LiteralNumber(2.0)),
-                                                  SourceLoc::new(1))),
-                                  SourceLoc::new(1))));
+                                                  SourceLoc::new(1, 10))),
+                                  SourceLoc::new(1, 4))));
     }
 
     #[test]
     fn test_parse_invalid() {
         let causes = vec![
-            ParseErrorCause::new(SourceLoc::new(1), "Unexpected token: And"),
-            ParseErrorCause::new(SourceLoc::new(1), "Unexpected token: Semicolon"),
+            ParseErrorCause::new(SourceLoc::new(1, 1), "Unexpected token: And"),
+            ParseErrorCause::new(SourceLoc::new(1, 4), "Unexpected token: Semicolon"),
         ];
         assert_eq!(parse("and;"), Err(ParseError::new(causes)));
     }
@@ -884,7 +901,7 @@ mod tests {
 
     #[test]
     fn test_parse_while_loop_break() {
-        let loc = SourceLoc::new(1);
+        let loc = SourceLoc::new(1, 14);
         assert_eq!(parse("while (true) break;"), Ok(vec![Stmt::While(LiteralBool(true),
                                                                      Box::new(Stmt::Break(loc)))]));
         assert!(parse("for (;;) if (true) break;").is_ok());

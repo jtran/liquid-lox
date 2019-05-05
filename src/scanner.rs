@@ -4,6 +4,7 @@ use std::mem;
 
 use unicode_segmentation::{GraphemeIndices, UnicodeSegmentation};
 
+use crate::source_loc::*;
 use crate::token::*;
 use crate::util;
 
@@ -41,6 +42,8 @@ pub struct Scanner<'source, 'g> {
     start: usize,
     current: usize,
     line: usize,
+    column: u16,
+    start_column: u16,
     eof: bool,
 }
 
@@ -53,6 +56,8 @@ impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
             start: 0,
             current: 0,
             line: 1,
+            column: 1,
+            start_column: 1,
             eof: false,
         }
     }
@@ -64,12 +69,14 @@ impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
             self.scan_token();
         }
 
+        self.start_column = self.column.saturating_sub(1);
         self.add_token(TokenType::Eof);
 
         mem::replace(&mut self.tokens, Vec::new())
     }
 
     fn scan_token(&mut self) {
+        self.start_column = self.column;
         match self.advance() {
             None => (),
             Some((_, grapheme_cluster)) => {
@@ -86,32 +93,46 @@ impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
                     ";" => self.add_token(Semicolon),
                     "*" => self.add_token(Star),
                     "!" => {
-                        if self.matches("=") { self.add_token(BangEqual) }
-                        else { self.add_token(Bang) };
+                        if self.matches("=") {
+                            self.add_token(BangEqual);
+                        } else {
+                            self.add_token(Bang);
+                        }
                     }
                     "=" => {
-                        if self.matches("=") { self.add_token(EqualEqual) }
-                        else { self.add_token(Equal) };
+                        if self.matches("=") {
+                            self.add_token(EqualEqual);
+                        } else {
+                            self.add_token(Equal);
+                        }
                     }
                     "<" => {
-                        if self.matches("=") { self.add_token(LessEqual) }
-                        else { self.add_token(Less) };
+                        if self.matches("=") {
+                            self.add_token(LessEqual);
+                        } else {
+                            self.add_token(Less);
+                        }
                     }
                     ">" => {
-                        if self.matches("=") { self.add_token(GreaterEqual) }
-                        else { self.add_token(Greater) };
+                        if self.matches("=") {
+                            self.add_token(GreaterEqual);
+                        } else {
+                            self.add_token(Greater);
+                        }
                     }
                     "/" => {
                         if self.matches("/") {
                             // A comment until the end of the line.
                             self.advance_to_eol();
-                        }
-                        else {
+                        } else {
                             self.add_token(Slash);
                         }
                     }
                     " " | "\r" | "\t" => (), // Ignore whitespace.
-                    "\n" => self.line += 1,
+                    "\n" => {
+                        self.line = self.line.saturating_add(1);
+                        self.column = 1;
+                    }
                     "\"" => self.scan_string(),
                     _ => {
                         if is_digit(grapheme_cluster) {
@@ -121,7 +142,7 @@ impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
                             self.scan_identifier();
                         }
                         else {
-                            util::error(self.line, &format!("Unexpected token: {}", grapheme_cluster));
+                            util::error(&SourceLoc::new(self.line, self.column), &format!("Unexpected token: {}", grapheme_cluster));
                         }
                     }
                 };
@@ -184,6 +205,8 @@ impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
 
     // Advance the grapheme cluster iterator.
     fn advance(&mut self) -> Option<(usize, &'g str)> {
+        self.column = self.column.saturating_add(1);
+
         match self.grapheme_indices.next() {
             None => {
                 self.eof = true;
@@ -222,7 +245,8 @@ impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
                 None => (),
                 Some((_, grapheme_cluster)) => {
                     if *grapheme_cluster == "\n" {
-                        self.line += 1;
+                        self.line = self.line.saturating_add(1);
+                        self.column = 0;
                     }
                 }
             };
@@ -231,7 +255,7 @@ impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
 
         // Unterminated string.
         if self.is_at_end() {
-            util::error(self.line, "Unterminated string");
+            util::error(&SourceLoc::new(self.line, self.column), "Unterminated string");
             return;
         }
 
@@ -314,19 +338,19 @@ impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
     // Add a token to the output.
     fn add_token(&mut self, token_type: TokenType) {
         let text = &self.source[self.start..self.peek_index()];
-        let token = Token::new(token_type, text, None, None, self.line);
+        let token = Token::new(token_type, text, None, None, self.line, self.start_column);
         self.tokens.push(token);
     }
 
     fn add_string_literal_token(&mut self, value: &'source str, start_line: usize) {
         let text = &self.source[self.start..self.peek_index()];
-        let token = Token::new(TokenType::String, text, Some(value), None, start_line);
+        let token = Token::new(TokenType::String, text, Some(value), None, start_line, self.start_column);
         self.tokens.push(token);
     }
 
     fn add_number_literal_token(&mut self, value: f64) {
         let text = &self.source[self.start..self.peek_index()];
-        let token = Token::new(TokenType::Number, text, None, Some(value), self.line);
+        let token = Token::new(TokenType::Number, text, None, Some(value), self.line, self.start_column);
         self.tokens.push(token);
     }
 }
@@ -363,135 +387,139 @@ mod tests {
     #[test]
     fn test_scan_single_tokens() {
         let mut s = Scanner::new("!");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Bang, "!", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Bang, "!", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 2)]);
         let mut s = Scanner::new(".");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Dot, ".", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Dot, ".", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 2)]);
         let mut s = Scanner::new("=");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Equal, "=", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Equal, "=", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 2)]);
         let mut s = Scanner::new("<");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Less, "<", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Less, "<", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 2)]);
         let mut s = Scanner::new("()");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::LeftParen, "(", None, None, 1),
-                                         Token::new(TokenType::RightParen, ")", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::LeftParen, "(", None, None, 1, 1),
+                                         Token::new(TokenType::RightParen, ")", None, None, 1, 2),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 3)]);
         let mut s = Scanner::new("{}");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::LeftBrace, "{", None, None, 1),
-                                         Token::new(TokenType::RightBrace, "}", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::LeftBrace, "{", None, None, 1, 1),
+                                         Token::new(TokenType::RightBrace, "}", None, None, 1, 2),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 3)]);
         // Next line.
         let mut s = Scanner::new("\n-");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Minus, "-", None, None, 2),
-                                         Token::new(TokenType::Eof, "", None, None, 2)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Minus, "-", None, None, 2, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 2, 2)]);
     }
 
     #[test]
     fn test_scan_double_tokens() {
         let mut s = Scanner::new("==");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::EqualEqual, "==", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::EqualEqual, "==", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 3)]);
         let mut s = Scanner::new("!=");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::BangEqual, "!=", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::BangEqual, "!=", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 3)]);
         let mut s = Scanner::new("<=");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::LessEqual, "<=", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::LessEqual, "<=", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 3)]);
     }
 
     #[test]
     fn test_scan_string() {
         let mut s = Scanner::new("\"hello\"");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::String, "\"hello\"", Some("hello"), None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::String, "\"hello\"", Some("hello"), None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 8)]);
+    }
+
+    #[test]
+    fn test_scan_multiline_string() {
         // Multi-line.
         let mut s = Scanner::new("\"hello\nthere\"");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::String, "\"hello\nthere\"", Some("hello\nthere"), None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 2)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::String, "\"hello\nthere\"", Some("hello\nthere"), None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 2, 7)]);
     }
 
     #[test]
     fn test_scan_number() {
         let mut s = Scanner::new("9.5");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Number, "9.5", None, Some(9.5), 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Number, "9.5", None, Some(9.5), 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 4)]);
         let mut s = Scanner::new("7");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Number, "7", None, Some(7.0), 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Number, "7", None, Some(7.0), 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 2)]);
         let mut s = Scanner::new("144.25.");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Number, "144.25", None, Some(144.25), 1),
-                                         Token::new(TokenType::Dot, ".", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Number, "144.25", None, Some(144.25), 1, 1),
+                                         Token::new(TokenType::Dot, ".", None, None, 1, 7),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 8)]);
     }
 
     #[test]
     fn test_scan_identifier() {
         let mut s = Scanner::new("foo");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "foo", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "foo", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 4)]);
         let mut s = Scanner::new("foo_bar2");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "foo_bar2", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "foo_bar2", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 9)]);
         let mut s = Scanner::new("π");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "π", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "π", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 2)]);
         // Multi-character grapheme cluster.
         let mut s = Scanner::new("y̆");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "y̆", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Identifier, "y̆", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 2)]);
     }
 
     #[test]
     fn test_scan_keywords() {
         let mut s = Scanner::new("and");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::And, "and", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::And, "and", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 4)]);
         let mut s = Scanner::new("break");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Break, "break", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Break, "break", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 6)]);
         let mut s = Scanner::new("class");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Class, "class", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Class, "class", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 6)]);
         let mut s = Scanner::new("else");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Else, "else", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Else, "else", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 5)]);
         let mut s = Scanner::new("false");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::False, "false", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::False, "false", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 6)]);
         let mut s = Scanner::new("for");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::For, "for", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::For, "for", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 4)]);
         let mut s = Scanner::new("fun");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Fun, "fun", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Fun, "fun", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 4)]);
         let mut s = Scanner::new("if");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::If, "if", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::If, "if", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 3)]);
         let mut s = Scanner::new("nil");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Nil, "nil", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Nil, "nil", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 4)]);
         let mut s = Scanner::new("or");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Or, "or", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Or, "or", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 3)]);
         let mut s = Scanner::new("print");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Print, "print", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Print, "print", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 6)]);
         let mut s = Scanner::new("return");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Return, "return", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Return, "return", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 7)]);
         let mut s = Scanner::new("this");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::This, "this", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::This, "this", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 5)]);
         let mut s = Scanner::new("true");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::True, "true", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::True, "true", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 5)]);
         let mut s = Scanner::new("var");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Var, "var", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::Var, "var", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 4)]);
         let mut s = Scanner::new("while");
-        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::While, "while", None, None, 1),
-                                         Token::new(TokenType::Eof, "", None, None, 1)]);
+        assert_eq!(s.scan_tokens(), vec![Token::new(TokenType::While, "while", None, None, 1, 1),
+                                         Token::new(TokenType::Eof, "", None, None, 1, 6)]);
     }
 }

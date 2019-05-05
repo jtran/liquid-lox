@@ -183,7 +183,7 @@ impl Interpreter {
                 let mut env = self.env.deref().borrow_mut();
                 env.assign_at(&id, dist_cell.get(), value.clone())
                     .map_err(|_| {
-                        RuntimeError::new(*loc, &format!("Undefined variable: {}", &id))
+                        RuntimeError::new(*loc, &format!("Cannot assign to undefined variable: {}", &id))
                     })?;
 
                 Ok(value)
@@ -571,7 +571,7 @@ mod tests {
 
     #[test]
     fn test_eval_divide_by_zero() {
-        let loc = SourceLoc::new(1);
+        let loc = SourceLoc::new(1, 3);
         assert_eq!(eval("1 / 0"), Err(RuntimeError::new(loc, "attempted to divide by zero")));
     }
 
@@ -615,7 +615,7 @@ mod tests {
     fn test_interpret_var() {
         assert_eq!(interpret("var x;"), Ok(NilVal));
         assert_eq!(interpret("var x = 1;"), Ok(NilVal));
-        assert_eq!(interpret("var x = x;"), Err(RuntimeError::new(SourceLoc::new(1), "parse error: Cannot read local variable in its own initializer: x")));
+        assert_eq!(interpret("var x = x;"), Err(RuntimeError::new(SourceLoc::new(1, 9), "parse error: Cannot read local variable in its own initializer: x")));
     }
 
     #[test]
@@ -627,14 +627,14 @@ mod tests {
     fn test_interpret_var_use() {
         assert_eq!(interpret("var x = 1; x;"), Ok(NumberVal(1.0)));
         assert_eq!(interpret("var x = 1; var y = 3; x = y = 5; x;"), Ok(NumberVal(5.0)));
-        assert_eq!(interpret("x;"), Err(RuntimeError::new(SourceLoc::new(1), "Undefined variable: x")));
-        assert_eq!(interpret("var x = 1; y;"), Err(RuntimeError::new(SourceLoc::new(1), "Undefined variable: y")));
+        assert_eq!(interpret("x;"), Err(RuntimeError::new(SourceLoc::new(1, 1), "Undefined variable: x")));
+        assert_eq!(interpret("var x = 1; y;"), Err(RuntimeError::new(SourceLoc::new(1, 12), "Undefined variable: y")));
     }
 
     #[test]
     fn test_interpret_var_assign() {
         assert_eq!(interpret("var x = 1; x = 2; x;"), Ok(NumberVal(2.0)));
-        assert_eq!(interpret("x = 1;"), Err(RuntimeError::new(SourceLoc::new(1), "Undefined variable: x")));
+        assert_eq!(interpret("x = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 3), "Cannot assign to undefined variable: x")));
     }
 
     #[test]
@@ -683,7 +683,7 @@ mod tests {
 
     #[test]
     fn test_interpret_top_level_break() {
-        assert_eq!(interpret("1 + 2;\nbreak;"), Err(RuntimeError::new(SourceLoc::new(2), "parse error: Found break statement outside of loop body")));
+        assert_eq!(interpret("1 + 2;\nbreak;"), Err(RuntimeError::new(SourceLoc::new(2, 1), "parse error: Found break statement outside of loop body")));
     }
 
     #[test]
@@ -743,7 +743,7 @@ mod tests {
 
     #[test]
     fn test_interpret_top_level_return() {
-        assert_eq!(interpret("1 + 2;\nreturn;"), Err(RuntimeError::new(SourceLoc::new(2), "parse error: Found return statement outside of function body")));
+        assert_eq!(interpret("1 + 2;\nreturn;"), Err(RuntimeError::new(SourceLoc::new(2, 1), "parse error: Found return statement outside of function body")));
     }
 
     #[test]
@@ -763,7 +763,7 @@ mod tests {
             class Point {
             }
             var p = Point();
-            p.x;"), Err(RuntimeError::new(SourceLoc::new(5), "Undefined property: x")));
+            p.x;"), Err(RuntimeError::new(SourceLoc::new(5, 14), "Undefined property: x")));
     }
 
     #[test]
@@ -793,8 +793,8 @@ mod tests {
 
     #[test]
     fn test_this_outside_method_body() {
-        assert_eq!(interpret("print this;"), Err(RuntimeError::new(SourceLoc::new(1), "parse error: Cannot use \"this\" outside of method body")));
-        assert_eq!(interpret("fun foo() { return this; }"), Err(RuntimeError::new(SourceLoc::new(1), "parse error: Cannot use \"this\" outside of method body")));
+        assert_eq!(interpret("print this;"), Err(RuntimeError::new(SourceLoc::new(1, 7), "parse error: Cannot use \"this\" outside of method body")));
+        assert_eq!(interpret("fun foo() { return this; }"), Err(RuntimeError::new(SourceLoc::new(1, 20), "parse error: Cannot use \"this\" outside of method body")));
     }
 
     #[test]
@@ -840,7 +840,7 @@ mod tests {
         assert_eq!(interpret("
             class Box {
             }
-            Box(1000000);"), Err(RuntimeError::new(SourceLoc::new(4), "Function called with wrong number of arguments; expected 0 but given 1")));
+            Box(1000000);"), Err(RuntimeError::new(SourceLoc::new(4, 16), "Function called with wrong number of arguments; expected 0 but given 1")));
     }
 
     #[test]
@@ -852,7 +852,7 @@ mod tests {
                     this.y = y;
                 }
             }
-            Point(5, 10, 1000000);"), Err(RuntimeError::new(SourceLoc::new(8), "Function called with wrong number of arguments; expected 2 but given 3")));
+            Point(5, 10, 1000000);"), Err(RuntimeError::new(SourceLoc::new(8, 18), "Function called with wrong number of arguments; expected 2 but given 3")));
     }
 
     #[test]
@@ -862,7 +862,7 @@ mod tests {
                 init() {
                     return 42;
                 }
-            }"), Err(RuntimeError::new(SourceLoc::new(4), "parse error: Cannot return a value from a class's initializer")));
+            }"), Err(RuntimeError::new(SourceLoc::new(4, 21), "parse error: Cannot return a value from a class's initializer")));
     }
 
     #[test]
@@ -926,7 +926,7 @@ mod tests {
                 }
             }
             var m = Math();
-            m.square(2);"), Err(RuntimeError::new(SourceLoc::new(8), "Undefined property: square")));
+            m.square(2);"), Err(RuntimeError::new(SourceLoc::new(8, 14), "Undefined property: square")));
     }
 
 
@@ -967,7 +967,7 @@ mod tests {
     fn test_class_inheriting_from_itself() {
         assert_eq!(interpret("
             class Box < Box {}
-            "), Err(RuntimeError::new(SourceLoc::new(2), "parse error: Class cannot inherit from itself")));
+            "), Err(RuntimeError::new(SourceLoc::new(2, 25), "parse error: Class cannot inherit from itself")));
     }
 
     #[test]
@@ -975,7 +975,7 @@ mod tests {
         // In the future, we could make arbitrary expressions work.
         assert_eq!(interpret("
             class Box < 2 {}
-            "), Err(RuntimeError::new(SourceLoc::new(2), "parse error: Expected identifier after \"<\" in class declaration")));
+            "), Err(RuntimeError::new(SourceLoc::new(2, 25), "parse error: Expected identifier after \"<\" in class declaration")));
     }
 
     #[test]
@@ -983,17 +983,17 @@ mod tests {
         assert_eq!(interpret("
             var x = \"not a class\";
             class Box < x {}
-            "), Err(RuntimeError::new(SourceLoc::new(3), "Superclass must be a class; instead found: \"not a class\"")));
+            "), Err(RuntimeError::new(SourceLoc::new(3, 19), "Superclass must be a class; instead found: \"not a class\"")));
     }
 
     #[test]
     fn test_super_outside_method_body() {
-        assert_eq!(interpret("super.x;"), Err(RuntimeError::new(SourceLoc::new(1), "parse error: Cannot use \"super\" outside of a class")));
-        assert_eq!(interpret("fun foo() { super.x; }"), Err(RuntimeError::new(SourceLoc::new(1), "parse error: Cannot use \"super\" outside of a class")));
+        assert_eq!(interpret("super.x;"), Err(RuntimeError::new(SourceLoc::new(1, 1), "parse error: Cannot use \"super\" outside of a class")));
+        assert_eq!(interpret("fun foo() { super.x; }"), Err(RuntimeError::new(SourceLoc::new(1, 13), "parse error: Cannot use \"super\" outside of a class")));
         assert_eq!(interpret("
             class Box {}
             fun foo() { super.x; }
-            "), Err(RuntimeError::new(SourceLoc::new(3), "parse error: Cannot use \"super\" outside of a class")));
+            "), Err(RuntimeError::new(SourceLoc::new(3, 25), "parse error: Cannot use \"super\" outside of a class")));
     }
 
     #[test]
@@ -1003,6 +1003,6 @@ mod tests {
                 foo() {
                     super.x;
                 }
-            }"), Err(RuntimeError::new(SourceLoc::new(4), "parse error: Cannot use \"super\" in class without a superclass")));
+            }"), Err(RuntimeError::new(SourceLoc::new(4, 21), "parse error: Cannot use \"super\" in class without a superclass")));
     }
 }

@@ -27,6 +27,7 @@ pub struct Token<'a> {
     pub string_literal: Option<&'a str>,
     pub float_literal: Option<f64>,
     pub line: usize,
+    pub column: u16,
 }
 
 impl<'a> Token<'a> {
@@ -34,7 +35,8 @@ impl<'a> Token<'a> {
               lexeme: &'a str,
               string_literal: Option<&'a str>,
               float_literal: Option<f64>,
-              line: usize)
+              line: usize,
+              column: u16)
         -> Token<'a>
     {
         Token {
@@ -43,6 +45,7 @@ impl<'a> Token<'a> {
             string_literal,
             float_literal,
             line,
+            column,
         }
     }
 }
