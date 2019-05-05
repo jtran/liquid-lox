@@ -3,12 +3,12 @@ use crate::token::Token;
 // Location in a source file.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct SourceLoc {
-    pub line: usize,
+    pub line: u32,
     pub column: u16,
 }
 
 impl SourceLoc {
-    pub fn new(line: usize, column: u16) -> SourceLoc {
+    pub fn new(line: u32, column: u16) -> SourceLoc {
         SourceLoc {
             line,
             column,

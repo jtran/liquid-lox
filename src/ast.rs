@@ -128,3 +128,19 @@ impl Parameter {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::mem;
+
+    #[test]
+    fn test_size_of_stmt() {
+        assert_eq!(mem::size_of::<Stmt>(), 120);
+    }
+
+    #[test]
+    fn test_size_of_expr() {
+        assert_eq!(mem::size_of::<Expr>(), 56);
+    }
+}

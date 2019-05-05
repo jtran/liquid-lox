@@ -41,7 +41,7 @@ pub struct Scanner<'source, 'g> {
     grapheme_indices: Peekable<GraphemeIndices<'g>>,
     start: usize,
     current: usize,
-    line: usize,
+    line: u32,
     column: u16,
     start_column: u16,
     eof: bool,
@@ -342,7 +342,7 @@ impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
         self.tokens.push(token);
     }
 
-    fn add_string_literal_token(&mut self, value: &'source str, start_line: usize) {
+    fn add_string_literal_token(&mut self, value: &'source str, start_line: u32) {
         let text = &self.source[self.start..self.peek_index()];
         let token = Token::new(TokenType::String, text, Some(value), None, start_line, self.start_column);
         self.tokens.push(token);
