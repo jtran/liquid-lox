@@ -102,10 +102,6 @@ impl Environment {
     // true value is returned for the error.
     fn get_at_distance(&self, index: u16, distance: u16) -> Result<Value, bool> {
         if distance == 0 {
-            // TODO: Don't clone here since it copies strings.  We only have a
-            // reference to the value, though.  We cannot change the return type
-            // to be a reference because that conflicts with getting enclosing
-            // environments.
             return self.values.get(usize::from(index)).cloned().ok_or(false);
         }
 

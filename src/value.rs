@@ -13,7 +13,7 @@ use crate::source_loc::*;
 pub enum Value {
     BoolVal(bool),
     ClassVal(ClassRef),
-    ClosureVal(Closure),
+    ClosureVal(ClosureRef),
     InstanceVal(InstanceRef),
     NativeFunctionVal(NativeFunctionId),
     NilVal,
@@ -51,12 +51,9 @@ impl Value {
         match (self, other) {
             (BoolVal(b1), BoolVal(b2)) => b1 == b2,
             (ClassVal(class1), ClassVal(class2)) => class1 == class2,
-            (ClosureVal(Closure(fun_def1, env1)), ClosureVal(Closure(fun_def2, env2))) => {
-                // Checking environments first since it's a fast pointer
-                // equality.  It also kind of matters that they are the same
-                // environments because they can be mutated.
-                Rc::ptr_eq(env1, env2) && fun_def1 == fun_def2
-            }
+            // It matters that they are the same environments because they can
+            // be mutated.
+            (ClosureVal(closure1), ClosureVal(closure2)) => closure1 == closure2,
             (InstanceVal(instance1), InstanceVal(instance2)) => instance1 == instance2,
             (NativeFunctionVal(id1), NativeFunctionVal(id2)) => id1 == id2,
             (NilVal, NilVal) => true,
@@ -84,7 +81,7 @@ impl Value {
             BoolVal(true) => "true".into(),
             BoolVal(false) => "false".into(),
             ClassVal(class_ref) => format!("<class {}>", class_ref.name()),
-            ClosureVal(Closure(fun_def, _)) => format!("<fn {}>", fun_def.name),
+            ClosureVal(closure) => format!("<fn {}>", closure.name()),
             InstanceVal(instance_ref) => format!("<instance {}>", instance_ref.class_name()),
             NativeFunctionVal(id) => format!("<native fn {}>", id),
             NilVal => "nil".into(),
@@ -273,12 +270,64 @@ impl Instance {
     }
 }
 
+#[derive(Clone, Debug)]
+pub struct ClosureRef(Rc<Closure>);
+
+impl ClosureRef {
+    pub fn new(fun_def: Rc<FunctionDefinition>,
+               env: Rc<RefCell<Environment>>) -> ClosureRef {
+        let closure = Closure(fun_def, env);
+
+        ClosureRef(Rc::new(closure))
+    }
+
+    pub fn name(&self) -> String {
+        self.0.name()
+    }
+
+    pub fn arity(&self) -> usize {
+        self.0.arity()
+    }
+
+    pub fn parameters(&self) -> &[Parameter] {
+        self.0.parameters()
+    }
+
+    pub fn function_definition(&self) -> &FunctionDefinition {
+        &(self.0).0
+    }
+
+    pub fn env(&self) -> &Rc<RefCell<Environment>> {
+        &(self.0).1
+    }
+
+    pub fn bind(&self, this_value: Value) -> ClosureRef {
+        let raw_closure = self.0.bind(this_value);
+
+        ClosureRef::new(raw_closure.0, raw_closure.1)
+    }
+}
+
+impl PartialEq for ClosureRef {
+    fn eq(&self, other: &ClosureRef) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
 #[derive(Clone, PartialEq)]
-pub struct Closure(pub Rc<FunctionDefinition>, pub Rc<RefCell<Environment>>);
+pub struct Closure(Rc<FunctionDefinition>, Rc<RefCell<Environment>>);
 
 impl Closure {
+    pub fn name(&self) -> String {
+        self.0.name.clone()
+    }
+
     pub fn arity(&self) -> usize {
         self.0.parameters.len()
+    }
+
+    pub fn parameters(&self) -> &[Parameter] {
+        &self.0.parameters
     }
 
     pub fn bind(&self, this_value: Value) -> Closure {
@@ -300,13 +349,13 @@ impl fmt::Display for Value {
             ClassVal(class_ref) => {
                 write!(f, "class {}{{...}}", class_ref.name())
             }
-            ClosureVal(Closure(fun_def, _)) => {
-                let param_names = fun_def.parameters.iter()
+            ClosureVal(closure) => {
+                let param_names = closure.parameters().iter()
                     .map(|p| p.name.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
 
-                write!(f, "fun {}({}) {{...}}", fun_def.name, param_names)
+                write!(f, "fun {}({}) {{...}}", closure.name(), param_names)
             }
             InstanceVal(instance_ref) => {
                 write!(f, "{}()", instance_ref.class_name())
@@ -326,9 +375,7 @@ impl fmt::Debug for Value {
         match self {
             BoolVal(b) => write!(f, "BoolVal({:?})", b),
             ClassVal(class_def) => write!(f, "ClassVal({:?})", class_def),
-            ClosureVal(Closure(fun_def, _)) => {
-                write!(f, "ClosureVal(Closure({:?}, Rc(...)))", fun_def)
-            }
+            ClosureVal(closure) => write!(f, "ClosureVal({:?})", closure),
             InstanceVal(instance) => write!(f, "InstanceVal({:?})", instance),
             NativeFunctionVal(id) => write!(f, "NativeFunctionVal({:?})", id),
             NilVal => write!(f, "NilVal"),
@@ -438,6 +485,6 @@ mod tests {
 
     #[test]
     fn test_size_of_value() {
-        assert_eq!(mem::size_of::<Value>(), 24);
+        assert_eq!(mem::size_of::<Value>(), 16);
     }
 }

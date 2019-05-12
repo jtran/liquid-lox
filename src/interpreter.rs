@@ -95,7 +95,7 @@ impl Interpreter {
                 let mut methods = FieldTable::new();
                 let mut class_methods = FieldTable::new();
                 for method in class_def.methods.iter() {
-                    let closure = Closure(Rc::new(method.clone()), Rc::clone(&self.env));
+                    let closure = ClosureRef::new(Rc::new(method.clone()), Rc::clone(&self.env));
                     let container = if method.fun_type == FunctionType::ClassMethod {
                         &mut class_methods
                     }
@@ -121,7 +121,7 @@ impl Interpreter {
             }
             Stmt::Expression(expr) => self.evaluate(expr).map_err(|err| err.into()),
             Stmt::Fun(fun_def) => {
-                let closure = Closure(Rc::new(fun_def.clone()), Rc::clone(&self.env));
+                let closure = ClosureRef::new(Rc::new(fun_def.clone()), Rc::clone(&self.env));
                 let mut env = self.env.deref().borrow_mut();
                 env.define(&fun_def.name, Value::ClosureVal(closure));
 
@@ -439,10 +439,11 @@ impl Interpreter {
 
                 Ok(instance_val)
             }
-            Value::ClosureVal(Closure(fun_def, env_sptr)) => {
+            Value::ClosureVal(closure_ref) => {
+                let fun_def = closure_ref.function_definition();
                 self.check_call_arity(fun_def.parameters.len(), args.len(), &fun_def.source_loc)?;
                 // Create a new environment, enclosed by closure's environment.
-                let mut new_env = Environment::new(Some(Rc::clone(&env_sptr)));
+                let mut new_env = Environment::new(Some(Rc::clone(closure_ref.env())));
                 // Bind parameters to argument values.
                 for (parameter, arg) in fun_def.parameters.iter().zip(args) {
                     new_env.define(&parameter.name, arg);
