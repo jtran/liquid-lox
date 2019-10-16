@@ -76,12 +76,10 @@ impl Interpreter {
 
                         match superclass_val {
                             Value::ClassVal(ref class_ref) => {
-                                if class_ref.has_superclass() {
-                                    // Define "super".
-                                    let mut new_env = self.new_env_from_current();
-                                    new_env.define("super", superclass_val.clone());
-                                    self.env = Rc::new(RefCell::new(new_env));
-                                }
+                                // Define "super".
+                                let mut new_env = self.new_env_from_current();
+                                new_env.define("super", superclass_val.clone());
+                                self.env = Rc::new(RefCell::new(new_env));
 
                                 Some(class_ref.clone())
                             }

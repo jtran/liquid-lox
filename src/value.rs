@@ -127,10 +127,6 @@ impl ClassRef {
     pub fn name(&self) -> String {
         self.0.name.clone()
     }
-
-    pub fn has_superclass(&self) -> bool {
-        self.0.superclass.is_some()
-    }
 }
 
 impl PartialEq for ClassRef {
