@@ -192,12 +192,17 @@ impl Interpreter {
                 match op {
                     // Math operators.
                     BinaryOperator::Plus => {
-                        match (left_val, right_val) {
+                        match (&left_val, &right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(NumberVal(x1 + x2)),
                             (StringVal(s1), StringVal(s2)) => {
                                 Ok(StringVal(Rc::new(format!("{}{}", s1.deref(), s2.deref()))))
                             }
-                            (StringVal(_), _) => Err(RuntimeError::new(*loc, &format!("expected string but found {} evaluating plus in expression: {:?}", right_type, expr))),
+                            (StringVal(s1), _) => {
+                                Ok(StringVal(Rc::new(format!("{}{}", s1.deref(), right_val.to_runtime_string()))))
+                            }
+                            (_, StringVal(s2)) => {
+                                Ok(StringVal(Rc::new(format!("{}{}", left_val.to_runtime_string(), s2.deref()))))
+                            }
                             (NumberVal(_), _) => Err(RuntimeError::new(*loc, &format!("expected number but found {} evaluating plus in expression: {:?}", right_type, expr))),
                             _ => Err(RuntimeError::new(*loc, &format!("expected number or string but found {} evaluating plus in expression: {:?}", left_type, expr))),
                         }
@@ -600,6 +605,17 @@ mod tests {
     fn test_interpret_operators() {
         assert_eq!(interpret("40 + 2;"), Ok(NumberVal(42.0)));
         assert_eq!(interpret("\"foo\" + \"bar\";"), Ok(StringVal(Rc::new("foobar".into()))));
+    }
+
+    #[test]
+    fn test_interpret_string_plus_number_coerces() {
+        // https://www.craftinginterpreters.com/evaluating-expressions.html#challenges
+        assert_eq!(interpret("\"scone\" + 4;"), Ok(StringVal(Rc::new("scone4".into()))));
+        assert_eq!(interpret("4 + \"scone\";"), Ok(StringVal(Rc::new("4scone".into()))));
+        assert_eq!(interpret("\"scone\" + true;"), Ok(StringVal(Rc::new("sconetrue".into()))));
+        assert_eq!(interpret("true + \"scone\";"), Ok(StringVal(Rc::new("truescone".into()))));
+        assert_eq!(interpret("\"scone\" + nil;"), Ok(StringVal(Rc::new("sconenil".into()))));
+        assert_eq!(interpret("nil + \"scone\";"), Ok(StringVal(Rc::new("nilscone".into()))));
     }
 
     #[test]
