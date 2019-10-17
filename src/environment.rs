@@ -19,6 +19,14 @@ pub struct VarLoc {
 }
 
 impl VarLoc {
+    pub fn placeholder() -> VarLoc {
+        VarLoc {
+            distance: 0,
+            index: 0,
+            unresolved: true,
+        }
+    }
+
     pub fn new(distance: u16, index: u16) -> VarLoc {
         VarLoc {
             distance,
@@ -27,9 +35,12 @@ impl VarLoc {
         }
     }
 
-    // Constructor for being explicit about being unresolved.
-    pub fn unresolved() -> VarLoc {
-        VarLoc::default()
+    pub fn new_global(distance: u16, index: u16) -> VarLoc {
+        VarLoc {
+            distance,
+            index,
+            unresolved: false,
+        }
     }
 
     pub fn distance(&self) -> u16 {
@@ -41,40 +52,29 @@ impl VarLoc {
     }
 }
 
-impl Default for VarLoc {
-    fn default() -> VarLoc {
-        VarLoc {
-            distance: 0,
-            index: 0,
-            unresolved: true,
-        }
-    }
-}
-
 // We store values in a Vec so that lookups are fast.  We also store string
 // names for debugging variables at runtime.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment {
     values: Vec<Value>,
     names: Vec<String>,
-    pub enclosing: Option<Rc<RefCell<Environment>>>,
+    enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
-impl Default for Environment {
-    fn default() -> Environment {
+impl Environment {
+    pub fn new_global() -> Environment {
         Environment {
             values: Vec::new(),
             names: Vec::new(),
             enclosing: None,
         }
     }
-}
 
-impl Environment {
-    pub fn new(enclosing: Option<Rc<RefCell<Environment>>>) -> Environment {
+    pub fn new_with_parent(enclosing: Rc<RefCell<Environment>>) -> Environment {
         Environment {
-            enclosing,
-            ..Default::default()
+            values: Vec::new(),
+            names: Vec::new(),
+            enclosing: Some(enclosing),
         }
     }
 
@@ -87,12 +87,13 @@ impl Environment {
         index as u16
     }
 
-    pub fn get_at(&self, error_name: &str, var_loc: VarLoc) -> Option<Value> {
+    pub fn get_at(&self, name: &str, var_loc: VarLoc) -> Option<Value> {
         if var_loc.unresolved {
-            return None;
+            panic!("Environment::get_at(): var_loc should not be unresolved");
         }
+
         match self.get_at_distance(var_loc.index, var_loc.distance) {
-            Err(true) => panic!("tried to look up a variable at a distance greater than exists: {} index={} distance={}", error_name, var_loc.index, var_loc.distance),
+            Err(true) => panic!("tried to look up a variable at a distance greater than exists: {} index={} distance={}", name, var_loc.index, var_loc.distance),
             Err(false) => None,
             Ok(v) => Some(v),
         }
@@ -117,14 +118,15 @@ impl Environment {
     }
 
     // Returns an error result if the key isn't already defined.
-    pub fn assign_at(&mut self, error_name: &str, var_loc: VarLoc, new_value: Value)
+    pub fn assign_at(&mut self, name: &str, var_loc: VarLoc, new_value: Value)
         -> Result<(), ()>
     {
         if var_loc.unresolved {
-            return Err(());
+            panic!("Environment::assign_at(): var_loc should not be unresolved");
         }
+
         match self.assign_at_distance(var_loc.index, var_loc.distance, new_value) {
-            Err(true) => panic!("tried to assign to a variable at a distance greater than exists: {} index={} distance={}", error_name, var_loc.index, var_loc.distance),
+            Err(true) => panic!("tried to assign to a variable at a distance greater than exists: {} index={} distance={}", name, var_loc.index, var_loc.distance),
             Err(false) => Err(()),
             Ok(()) => Ok(())
         }

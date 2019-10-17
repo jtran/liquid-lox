@@ -32,9 +32,17 @@ pub struct Resolver {
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum VarResolveDefinedState {
+    UndefinedVar,
+    DeclaredVar,
+    DefinedVar,
+}
+use VarResolveDefinedState::*;
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct VarResolveState {
     pub frame_index: usize,
-    pub is_defined: bool,
+    pub defined_state: VarResolveDefinedState,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -60,16 +68,13 @@ impl Resolver {
             class_type: ClassType::NoClass,
         };
 
-        // Start with the prelude scope.
+        // Start with the globals scope.
+        //
+        // Note: this behavior must match the Interpreter.
         resolver.begin_scope();
         for native_id in all_native_ids() {
             resolver.define(&native_id.to_string())
         }
-
-        // Create a top-level scope.
-        //
-        // Note: this behavior must match the Interpreter.
-        resolver.begin_scope();
 
         resolver
     }
@@ -251,8 +256,11 @@ impl Resolver {
                     match scope.get(identifier) {
                         None => (),
                         Some(ref resolve_state) => {
-                            if ! resolve_state.is_defined {
-                                return Err(ParseErrorCause::new(*loc, &format!("Cannot read local variable in its own initializer: {}", identifier)));
+                            match resolve_state.defined_state {
+                                DefinedVar | UndefinedVar => (),
+                                DeclaredVar => {
+                                    return Err(ParseErrorCause::new(*loc, &format!("Cannot read local variable in its own initializer: {}", identifier)));
+                                }
                             }
                         }
                     };
@@ -366,8 +374,14 @@ impl Resolver {
             }
         }
 
-        // Couldn't resolve.  This should turn into a runtime error.
-        VarLoc::unresolved()
+        // Couldn't resolve.  This should turn into a global variable access or
+        // runtime error.
+        let frame_index = self.forward_reserve_global_var(identifier);
+        // There should always be a global scope.
+        assert!(len > 0);
+        let distance = (len - 1) as u16;
+
+        VarLoc::new_global(distance, frame_index as u16)
     }
 
     fn begin_scope(&mut self) {
@@ -381,28 +395,48 @@ impl Resolver {
         self.scopes.pop();
     }
 
-    fn declare(&mut self, identifier: &str) {
-        let scope = self.scopes.last_mut().expect("Resolver::declare: I'm trying to look up the most-local scope, but there are none");
+    fn forward_reserve_global_var(&mut self, identifier: &str) -> usize {
+        let scope = self.scopes.first_mut().expect("Resolver::forward_reserve_global_var: I'm trying to look up the top-most global scope, but there are none");
+        let frame_index = scope.len();
         let var_resolve_state = VarResolveState {
-            frame_index: scope.len(),
-            is_defined: false,
+            frame_index,
+            defined_state: UndefinedVar,
         };
         ensure_scope_index_limit(scope.len());
         match scope.entry(identifier.to_string()) {
             entry @ Entry::Vacant(_) => entry.or_insert(var_resolve_state),
-            Entry::Occupied(_) => panic!("Resolver::declare: I'm trying to declare something that's already declared: {}", identifier),
+            Entry::Occupied(_) => panic!("Resolver::forward_reserve_global_var: I'm trying to forward reserve something that's already declared: {}", identifier),
         };
+
+        frame_index
+    }
+
+    fn declare(&mut self, identifier: &str) {
+        let scope = self.scopes.last_mut().expect("Resolver::declare: I'm trying to look up the most-local scope, but there are none");
+        let var_resolve_state = VarResolveState {
+            frame_index: scope.len(),
+            defined_state: DeclaredVar,
+        };
+        ensure_scope_index_limit(scope.len());
+        scope.entry(identifier.to_string())
+            .and_modify(|mut state| {
+                match state.defined_state {
+                    UndefinedVar => state.defined_state = DeclaredVar,
+                    DeclaredVar | DefinedVar => panic!("Resolver::declare: I'm trying to declare something that's already declared: {}", identifier),
+                };
+            })
+            .or_insert(var_resolve_state);
     }
 
     fn define(&mut self, identifier: &str) {
         let scope = self.scopes.last_mut().expect("Resolver::define: I'm trying to look up the most-local scope, but there are none");
         let var_resolve_state = VarResolveState {
             frame_index: scope.len(),
-            is_defined: true,
+            defined_state: DefinedVar,
         };
         ensure_scope_index_limit(scope.len());
         scope.entry(identifier.to_string())
-            .and_modify(|mut state| state.is_defined = true )
+            .and_modify(|mut state| state.defined_state = DefinedVar )
             .or_insert(var_resolve_state);
     }
 }

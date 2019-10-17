@@ -328,7 +328,7 @@ impl Closure {
 
     pub fn bind(&self, this_value: Value) -> Closure {
         // Create a new environment.
-        let mut new_env = Environment::new(Some(Rc::clone(&self.1)));
+        let mut new_env = Environment::new_with_parent(Rc::clone(&self.1));
         new_env.define("this", this_value);
 
         Closure(Rc::clone(&self.0), Rc::new(RefCell::new(new_env)))

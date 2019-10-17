@@ -16,18 +16,15 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        let mut prelude = Environment::default();
+        // Note: this behavior must match the Resolver.
+        let mut globals = Environment::new_global();
         for native_id in all_native_ids() {
-            prelude.define(&native_id.to_string(),
+            globals.define(&native_id.to_string(),
                            Value::NativeFunctionVal(native_id));
         }
-        // We need an empty scope so that resolved indexes can start from 0.
-        //
-        // Note: this behavior must match the Resolver.
-        let top_scope = Environment::new(Some(Rc::new(RefCell::new(prelude))));
 
         Interpreter {
-            env: Rc::new(RefCell::new(top_scope)),
+            env: Rc::new(RefCell::new(globals)),
         }
     }
 
@@ -441,7 +438,7 @@ impl Interpreter {
                 let fun_def = closure_ref.function_definition();
                 self.check_call_arity(fun_def.parameters.len(), args.len(), &fun_def.source_loc)?;
                 // Create a new environment, enclosed by closure's environment.
-                let mut new_env = Environment::new(Some(Rc::clone(closure_ref.env())));
+                let mut new_env = Environment::new_with_parent(Rc::clone(closure_ref.env()));
                 // Bind parameters to argument values.
                 for (parameter, arg) in fun_def.parameters.iter().zip(args) {
                     new_env.define(&parameter.name, arg);
@@ -479,7 +476,7 @@ impl Interpreter {
     }
 
     fn new_env_from_current(&self) -> Environment {
-        Environment::new(Some(Rc::clone(&self.env)))
+        Environment::new_with_parent(Rc::clone(&self.env))
     }
 }
 
@@ -738,6 +735,45 @@ mod tests {
                 var x = \"local\";
                 show();
             }"), Ok(StringVal(Rc::new("global".to_string()))));
+    }
+
+    #[test]
+    fn test_interpret_use_global_variable_when_not_resolvable() {
+        // See https://www.craftinginterpreters.com/global-variables.html
+        assert_eq!(interpret("
+            fun showVariable() {
+                return global;
+            }
+
+            var global = \"after\";
+            showVariable();
+            "), Ok(StringVal(Rc::new("after".to_string()))));
+    }
+
+    #[test]
+    fn test_interpret_use_global_variable_when_not_resolvable_and_not_defined() {
+        // See https://www.craftinginterpreters.com/global-variables.html
+        assert_eq!(interpret("
+            fun showVariable() {
+                return global;
+            }
+
+            showVariable();
+            "), Err(RuntimeError::new(SourceLoc::new(3, 24), "Undefined variable: global")));
+    }
+
+    #[test]
+    fn test_interpret_assign_to_global_variable_when_not_resolvable() {
+        // See https://www.craftinginterpreters.com/global-variables.html
+        assert_eq!(interpret("
+            fun changeVariable() {
+                global = \"changed\";
+            }
+
+            var global = \"original\";
+            changeVariable();
+            global;
+            "), Ok(StringVal(Rc::new("changed".to_string()))));
     }
 
     #[test]

@@ -111,7 +111,7 @@ impl<'a> Parser<'a> {
         // Optional superclass.
         let superclass = if self.match_token(TokenType::Less) {
             let (super_id, super_loc) = self.consume_identifier("Expected identifier after \"<\" in class declaration")?;
-            let super_expr = Expr::Variable(super_id, Cell::new(VarLoc::default()), super_loc);
+            let super_expr = Expr::Variable(super_id, Cell::new(VarLoc::placeholder()), super_loc);
 
             Some(Box::new(super_expr))
         } else {
@@ -385,7 +385,7 @@ impl<'a> Parser<'a> {
                     Expr::Get(object_expr, property_name, _) =>
                         Ok(Expr::Set(object_expr, property_name, Box::new(right_expr), loc)),
                     Expr::Variable(id, _, _) =>
-                        Ok(Expr::Assign(id, Cell::new(VarLoc::default()), Box::new(right_expr), loc)),
+                        Ok(Expr::Assign(id, Cell::new(VarLoc::placeholder()), Box::new(right_expr), loc)),
                     _ => Err(self.error_from_last(&format!("Invalid assignment target; expected identifier, found: {:?}", &expr))),
                 }
             }
@@ -594,7 +594,7 @@ impl<'a> Parser<'a> {
                     Some(token) => {
                         let loc = SourceLoc::from(token);
 
-                        Expr::Variable(token.lexeme.to_string(), Cell::new(VarLoc::default()), loc)
+                        Expr::Variable(token.lexeme.to_string(), Cell::new(VarLoc::placeholder()), loc)
                     }
                 }
             }
@@ -619,7 +619,7 @@ impl<'a> Parser<'a> {
                         self.consume(TokenType::Dot, "Expected \".\" after \"super\"")?;
                         let (id, _) = self.consume_identifier("Expected superclass method identifier after \"super.\"")?;
 
-                        Expr::Super(Cell::new(VarLoc::default()), id, loc)
+                        Expr::Super(Cell::new(VarLoc::placeholder()), id, loc)
                     }
                 }
             }
@@ -854,18 +854,18 @@ mod tests {
     #[test]
     fn test_parse_assign() {
         assert_eq!(parse_expression("x = 1"), Ok(Assign("x".to_string(),
-                                                        Cell::new(VarLoc::default()),
+                                                        Cell::new(VarLoc::placeholder()),
                                                         Box::new(LiteralNumber(1.0)),
                                                         SourceLoc::new(1, 3))));
     }
 
     #[test]
     fn test_parse_super_property() {
-        assert_eq!(parse_expression("super.x"), Ok(Super(Cell::new(VarLoc::default()),
+        assert_eq!(parse_expression("super.x"), Ok(Super(Cell::new(VarLoc::placeholder()),
                                                          "x".to_string(),
                                                          SourceLoc::new(1, 1))));
         assert_eq!(parse("super.y;"), Ok(vec![Stmt::Expression(
-                                                  Super(Cell::new(VarLoc::default()),
+                                                  Super(Cell::new(VarLoc::placeholder()),
                                                         "y".to_string(),
                                                         SourceLoc::new(1, 1)))]));
     }
