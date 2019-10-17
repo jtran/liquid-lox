@@ -52,12 +52,10 @@ impl VarLoc {
     }
 }
 
-// We store values in a Vec so that lookups are fast.  We also store string
-// names for debugging variables at runtime.
+// We store values in a Vec so that lookups are fast.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment {
     values: Vec<Value>,
-    names: Vec<String>,
     enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
@@ -65,7 +63,6 @@ impl Environment {
     pub fn new_global() -> Environment {
         Environment {
             values: Vec::new(),
-            names: Vec::new(),
             enclosing: None,
         }
     }
@@ -73,15 +70,13 @@ impl Environment {
     pub fn new_with_parent(enclosing: Rc<RefCell<Environment>>) -> Environment {
         Environment {
             values: Vec::new(),
-            names: Vec::new(),
             enclosing: Some(enclosing),
         }
     }
 
-    pub fn define(&mut self, name: &str, value: Value) -> u16 {
+    pub fn define(&mut self, _name: &str, value: Value) -> u16 {
         let index = self.values.len();
 
-        self.names.push(name.to_string());
         self.values.push(value);
 
         index as u16
