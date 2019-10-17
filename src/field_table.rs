@@ -21,7 +21,6 @@ impl FieldTable {
     }
 
     pub fn get(&self, name: &str) -> Option<Value> {
-        // TODO: Don't clone here since it copies strings.
         self.map.get(name).cloned()
     }
 
