@@ -333,9 +333,12 @@ impl Resolver {
     fn resolve_function(&mut self,
                         fun_def: &mut FunctionDefinition,
                         function_type: FunctionType) -> Result<(), ParseErrorCause> {
-        // Track that we're in a function.
+        // Track what kind of function we're in.
         let enclosing_func_type = self.function_type;
-        self.function_type = function_type;
+        // We can't just use the new one because it may be a plain function
+        // nested inside of a method.  In that case, we want to keep the state
+        // that we are in a method.
+        self.function_type = merge_function_types(enclosing_func_type, function_type);
 
         self.begin_scope();
         for parameter in &fun_def.parameters {
@@ -438,6 +441,20 @@ impl Resolver {
         scope.entry(identifier.to_string())
             .and_modify(|mut state| state.defined_state = DefinedVar )
             .or_insert(var_resolve_state);
+    }
+}
+
+fn merge_function_types(old_ft: FunctionType, new_ft: FunctionType) -> FunctionType {
+    match (old_ft, new_ft) {
+        (FunctionType::NoFunction, _) => new_ft,
+        (FunctionType::Plain, FunctionType::NoFunction) => old_ft,
+        (FunctionType::Plain, _) => new_ft,
+        (FunctionType::Initializer, FunctionType::NoFunction) => old_ft,
+        (FunctionType::Initializer, FunctionType::Plain) => old_ft,
+        (FunctionType::Initializer, _) => new_ft,
+        (FunctionType::Method, FunctionType::NoFunction) => old_ft,
+        (FunctionType::Method, FunctionType::Plain) => old_ft,
+        (FunctionType::Method, _) => new_ft,
     }
 }
 

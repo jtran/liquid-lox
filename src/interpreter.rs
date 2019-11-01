@@ -929,6 +929,21 @@ mod tests {
     }
 
     #[test]
+    fn test_can_use_this_in_function_nested_in_method() {
+        assert_eq!(interpret("
+            class Box {
+                foo() {
+                    fun nested() {
+                        print this;
+                        return 1;
+                    }
+                    return nested();
+                }
+            }
+            Box().foo();"), Ok(NumberVal(1.0)));
+    }
+
+    #[test]
     fn test_static_class_method() {
         assert_eq!(interpret("
             class Math {
