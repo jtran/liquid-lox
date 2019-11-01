@@ -384,8 +384,13 @@ impl<'a> Parser<'a> {
                 match expr {
                     Expr::Get(object_expr, property_name, _) =>
                         Ok(Expr::Set(object_expr, property_name, Box::new(right_expr), loc)),
-                    Expr::Variable(id, _, _) =>
-                        Ok(Expr::Assign(id, Cell::new(VarLoc::placeholder()), Box::new(right_expr), loc)),
+                    Expr::Variable(id, _, _) => {
+                        if id == "this" {
+                            Err(ParseErrorCause::new_with_location(loc, "=", "Invalid assignment target."))
+                        } else {
+                            Ok(Expr::Assign(id, Cell::new(VarLoc::placeholder()), Box::new(right_expr), loc))
+                        }
+                    }
                     _ => Err(self.error_from_last(&format!("Invalid assignment target; expected identifier, found: {:?}", &expr))),
                 }
             }

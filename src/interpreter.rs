@@ -651,6 +651,12 @@ mod tests {
     }
 
     #[test]
+    fn test_interpret_assign_to_this() {
+        assert_eq!(interpret("var this = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 5), "parse error: Expected identifier after \"var\"")));
+        assert_eq!(interpret("this = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 6), "parse error: Invalid assignment target.")));
+    }
+
+    #[test]
     fn test_interpret_blocks() {
         assert_eq!(interpret("var x = 1; { var x = 2; x; }"), Ok(NumberVal(2.0)));
         assert_eq!(interpret("var x = 1; { var x = 2; } x;"), Ok(NumberVal(1.0)));
