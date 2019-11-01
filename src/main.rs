@@ -121,15 +121,27 @@ fn print_result(result: &Result<Value, RunError>, print_success: bool) {
                 RunError::RunParseError(err) => {
                     // Print all causes.
                     for cause in err.causes.iter() {
-                        util::error(&cause.source_loc, &cause.message);
+                        print_parse_error(&cause);
                     }
                 }
                 RunError::RunRuntimeError(err) => {
-                    util::error(&err.source_loc, &err.message);
+                    print_runtime_error(&err);
                 }
             }
         }
     }
+}
+
+fn print_parse_error(error: &ParseErrorCause) {
+    match error.token {
+        None => util::error(&error.source_loc, &error.message),
+        Some(ref token) => util::error_at_token(&error.source_loc, &token, &error.message)
+    }
+}
+
+fn print_runtime_error(error: &RuntimeError) {
+    eprintln!("{}", error.message);
+    eprintln!("[line {}:{}]", error.source_loc.line, error.source_loc.column);
 }
 
 impl From<ParseError> for RunError {

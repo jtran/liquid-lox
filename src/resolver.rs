@@ -142,7 +142,7 @@ impl Resolver {
                     FunctionType::Plain
                     | FunctionType::Initializer
                     | FunctionType::Method => (),
-                    _ => return Err(ParseErrorCause::new(*loc, "Found return statement outside of function body")),
+                    _ => return Err(ParseErrorCause::new_with_location(*loc, "return", "Cannot return from top-level code.")),
                 }
 
                 // TODO: This currently doesn't distinguish between returning
@@ -151,7 +151,7 @@ impl Resolver {
                     match expr {
                         Expr::LiteralNil => (),
                         _ => {
-                            return Err(ParseErrorCause::new(*loc, "Cannot return a value from a class's initializer"));
+                            return Err(ParseErrorCause::new_with_location(*loc, "return", "Cannot return a value from an initializer."));
                         }
                     }
                 }
@@ -285,7 +285,7 @@ impl Resolver {
                 match boxed_expr.deref() {
                     Expr::Variable(id, _, loc) => {
                         if *id == class_def.name {
-                            return Err(ParseErrorCause::new(*loc, "Class cannot inherit from itself"));
+                            return Err(ParseErrorCause::new_with_location(*loc, id, "A class cannot inherit from itself."));
                         }
                     }
                     _ => (),

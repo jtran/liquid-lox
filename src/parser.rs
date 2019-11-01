@@ -795,6 +795,7 @@ impl ParseError {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ParseErrorCause {
     pub source_loc: SourceLoc,
+    pub token: Option<String>,
     pub message: String,
 }
 
@@ -802,6 +803,15 @@ impl ParseErrorCause {
     pub fn new(source_loc: SourceLoc, message: &str) -> ParseErrorCause {
         ParseErrorCause {
             source_loc,
+            token: None,
+            message: message.to_string(),
+        }
+    }
+
+    pub fn new_with_location(source_loc: SourceLoc, token: &str, message: &str) -> ParseErrorCause {
+        ParseErrorCause {
+            source_loc,
+            token: Some(token.to_string()),
             message: message.to_string(),
         }
     }

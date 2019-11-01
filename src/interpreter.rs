@@ -81,7 +81,8 @@ impl Interpreter {
                                 Some(class_ref.clone())
                             }
                             // TODO: Store and use the superclass source location.
-                            _ => return Err(ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
+                            _ => return Err(ExecutionInterrupt::Error(RuntimeError::new_with_details(class_def.source_loc,
+                                            "Superclass must be a class.",
                                             &format!("Superclass must be a class; instead found: {}", superclass_val)))),
                         }
                     }
@@ -178,7 +179,7 @@ impl Interpreter {
                 let mut env = self.env.deref().borrow_mut();
                 env.assign_at(&id, dist_cell.get(), value.clone())
                     .map_err(|_| {
-                        RuntimeError::new(*loc, &format!("Cannot assign to undefined variable: {}", &id))
+                        RuntimeError::new(*loc, &format!("Undefined variable '{}'.", &id))
                     })?;
 
                 Ok(value)
@@ -203,20 +204,20 @@ impl Interpreter {
                             (_, StringVal(s2)) => {
                                 Ok(StringVal(Rc::new(format!("{}{}", left_val.to_runtime_string(), s2.deref()))))
                             }
-                            (NumberVal(_), _) => Err(RuntimeError::new(*loc, &format!("expected number but found {} evaluating plus in expression: {:?}", right_type, expr))),
-                            _ => Err(RuntimeError::new(*loc, &format!("expected number or string but found {} evaluating plus in expression: {:?}", left_type, expr))),
+                            (NumberVal(_), _) => Err(RuntimeError::new_with_details(*loc, "Operands must be two numbers or two strings.", &format!("expected number but found {} evaluating plus in expression: {:?}", right_type, expr))),
+                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be two numbers or two strings.", &format!("expected number or string but found {} evaluating plus in expression: {:?}", left_type, expr))),
                         }
                     },
                     BinaryOperator::Minus => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(NumberVal(x1 - x2)),
-                            _ => Err(RuntimeError::new(*loc, &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
                         }
                     },
                     BinaryOperator::Multiply => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(NumberVal(x1 * x2)),
-                            _ => Err(RuntimeError::new(*loc, &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
                         }
                     },
                     BinaryOperator::Divide => {
@@ -229,7 +230,7 @@ impl Interpreter {
                                     Ok(NumberVal(x1 / x2))
                                 }
                             }
-                            _ => Err(RuntimeError::new(*loc, &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
                         }
                     },
                     // Comparison operators.
@@ -238,25 +239,25 @@ impl Interpreter {
                     BinaryOperator::Less => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 < x2)),
-                            _ => Err(RuntimeError::new(*loc, &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
                         }
                     },
                     BinaryOperator::LessEqual => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 <= x2)),
-                            _ => Err(RuntimeError::new(*loc, &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
                         }
                     },
                     BinaryOperator::Greater => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 > x2)),
-                            _ => Err(RuntimeError::new(*loc, &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
                         }
                     },
                     BinaryOperator::GreaterEqual => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 >= x2)),
-                            _ => Err(RuntimeError::new(*loc, &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
                         }
                     },
                 }
@@ -277,16 +278,16 @@ impl Interpreter {
                     Value::ClassVal(class_ref) => {
                         match class_ref.get(property_name) {
                             Some(v) => Ok(v),
-                            None => Err(RuntimeError::new(*loc, &format!("Undefined property: {}", property_name))),
+                            None => Err(RuntimeError::new(*loc, &format!("Undefined property '{}'.", property_name))),
                         }
                     }
                     Value::InstanceVal(instance_ref) => {
                         match instance_ref.get(property_name) {
                             Some(v) => Ok(v),
-                            None => Err(RuntimeError::new(*loc, &format!("Undefined property: {}", property_name))),
+                            None => Err(RuntimeError::new(*loc, &format!("Undefined property '{}'.", property_name))),
                         }
                     }
-                    _ => Err(RuntimeError::new(*loc, &format!("Only instances and classes have properties but found {} with type {}", left_val, left_val.runtime_type()))),
+                    _ => Err(RuntimeError::new_with_details(*loc, "Only instances have properties.", &format!("Only instances and classes have properties but found {} with type {}", left_val, left_val.runtime_type()))),
                 }
             }
             Expr::Grouping(e) => self.evaluate(e),
@@ -323,7 +324,7 @@ impl Interpreter {
 
                         Ok(value)
                     }
-                    _ => Err(RuntimeError::new(*loc, &format!("Only instances have fields to set but found {} with type {}", left_val, left_val.runtime_type()))),
+                    _ => Err(RuntimeError::new_with_details(*loc, "Only instances have fields.", &format!("Only instances have fields to set but found {} with type {}", left_val, left_val.runtime_type()))),
                 }
             }
             Expr::Super(super_dist_cell, id, loc) => {
@@ -350,11 +351,11 @@ impl Interpreter {
                     None => Err(RuntimeError::new(*loc, "Undefined variable \"this\" when evaluating super expression")),
                     Some(Value::ClassVal(class_ref)) => {
                         superclass.bound_class_method(id, class_ref)
-                            .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property: {}", id)))
+                            .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property '{}'.", id)))
                     }
                     Some(Value::InstanceVal(instance_ref)) => {
                         superclass.bound_method(id, instance_ref)
-                            .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property: {}", id)))
+                            .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property '{}'.", id)))
                     }
                     // Interpreter bug?
                     Some(_) => Err(RuntimeError::new(*loc, "\"this\" in super expression didn't evaluate to an instance or class")),
@@ -366,7 +367,7 @@ impl Interpreter {
                 env.get_at(id, dist_cell.get())
                     // In the case that the variable is not in the environment,
                     // generate a runtime error.
-                    .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined variable: {}", id)))
+                    .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined variable '{}'.", id)))
             }
             Expr::Unary(op, e, loc) => {
                 let v = self.evaluate(e)?;
@@ -376,7 +377,7 @@ impl Interpreter {
                     UnaryOperator::Minus => {
                         match v {
                             NumberVal(x) => Ok(NumberVal(-x)),
-                            _ => Err(RuntimeError::new(*loc, &format!("expected number but found {} evaluating expression: {:?}", right_type, expr))),
+                            _ => Err(RuntimeError::new_with_details(*loc, "Operand must be a number.", &format!("expected number but found {} evaluating expression: {:?}", right_type, expr))),
                         }
                     },
                     UnaryOperator::Not => Ok(BoolVal(!v.is_truthy())),
@@ -454,7 +455,7 @@ impl Interpreter {
 
                 self.unwrap_return_value(return_value_result)
             }
-            _ => Err(RuntimeError::new(loc, &format!("You can only call functions and classes, but you tried to call: {}", callee))),
+            _ => Err(RuntimeError::new_with_details(loc, "Can only call functions and classes.", &format!("You can only call functions and classes, but you tried to call: {}", callee))),
         }
     }
 
@@ -462,7 +463,7 @@ impl Interpreter {
         -> Result<(), RuntimeError>
     {
         if num_args != arity {
-            return Err(RuntimeError::new(*loc, &format!("Function called with wrong number of arguments; expected {} but given {}", arity, num_args)));
+            return Err(RuntimeError::new(*loc, &format!("Expected {} arguments but got {}.", arity, num_args)));
         }
 
         Ok(())
@@ -639,14 +640,14 @@ mod tests {
     fn test_interpret_var_use() {
         assert_eq!(interpret("var x = 1; x;"), Ok(NumberVal(1.0)));
         assert_eq!(interpret("var x = 1; var y = 3; x = y = 5; x;"), Ok(NumberVal(5.0)));
-        assert_eq!(interpret("x;"), Err(RuntimeError::new(SourceLoc::new(1, 1), "Undefined variable: x")));
-        assert_eq!(interpret("var x = 1; y;"), Err(RuntimeError::new(SourceLoc::new(1, 12), "Undefined variable: y")));
+        assert_eq!(interpret("x;"), Err(RuntimeError::new(SourceLoc::new(1, 1), "Undefined variable 'x'.")));
+        assert_eq!(interpret("var x = 1; y;"), Err(RuntimeError::new(SourceLoc::new(1, 12), "Undefined variable 'y'.")));
     }
 
     #[test]
     fn test_interpret_var_assign() {
         assert_eq!(interpret("var x = 1; x = 2; x;"), Ok(NumberVal(2.0)));
-        assert_eq!(interpret("x = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 3), "Cannot assign to undefined variable: x")));
+        assert_eq!(interpret("x = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 3), "Undefined variable 'x'.")));
     }
 
     #[test]
@@ -775,7 +776,7 @@ mod tests {
             }
 
             showVariable();
-            "), Err(RuntimeError::new(SourceLoc::new(3, 24), "Undefined variable: global")));
+            "), Err(RuntimeError::new(SourceLoc::new(3, 24), "Undefined variable 'global'.")));
     }
 
     #[test]
@@ -794,7 +795,7 @@ mod tests {
 
     #[test]
     fn test_interpret_top_level_return() {
-        assert_eq!(interpret("1 + 2;\nreturn;"), Err(RuntimeError::new(SourceLoc::new(2, 1), "parse error: Found return statement outside of function body")));
+        assert_eq!(interpret("1 + 2;\nreturn;"), Err(RuntimeError::new(SourceLoc::new(2, 1), "parse error: Cannot return from top-level code.")));
     }
 
     #[test]
@@ -814,7 +815,7 @@ mod tests {
             class Point {
             }
             var p = Point();
-            p.x;"), Err(RuntimeError::new(SourceLoc::new(5, 14), "Undefined property: x")));
+            p.x;"), Err(RuntimeError::new(SourceLoc::new(5, 14), "Undefined property 'x'.")));
     }
 
     #[test]
@@ -891,7 +892,7 @@ mod tests {
         assert_eq!(interpret("
             class Box {
             }
-            Box(1000000);"), Err(RuntimeError::new(SourceLoc::new(4, 16), "Function called with wrong number of arguments; expected 0 but given 1")));
+            Box(1000000);"), Err(RuntimeError::new(SourceLoc::new(4, 16), "Expected 0 arguments but got 1.")));
     }
 
     #[test]
@@ -903,7 +904,7 @@ mod tests {
                     this.y = y;
                 }
             }
-            Point(5, 10, 1000000);"), Err(RuntimeError::new(SourceLoc::new(8, 18), "Function called with wrong number of arguments; expected 2 but given 3")));
+            Point(5, 10, 1000000);"), Err(RuntimeError::new(SourceLoc::new(8, 18), "Expected 2 arguments but got 3.")));
     }
 
     #[test]
@@ -913,7 +914,7 @@ mod tests {
                 init() {
                     return 42;
                 }
-            }"), Err(RuntimeError::new(SourceLoc::new(4, 21), "parse error: Cannot return a value from a class's initializer")));
+            }"), Err(RuntimeError::new(SourceLoc::new(4, 21), "parse error: Cannot return a value from an initializer.")));
     }
 
     #[test]
@@ -977,7 +978,7 @@ mod tests {
                 }
             }
             var m = Math();
-            m.square(2);"), Err(RuntimeError::new(SourceLoc::new(8, 14), "Undefined property: square")));
+            m.square(2);"), Err(RuntimeError::new(SourceLoc::new(8, 14), "Undefined property 'square'.")));
     }
 
 
@@ -1018,7 +1019,7 @@ mod tests {
     fn test_class_inheriting_from_itself() {
         assert_eq!(interpret("
             class Box < Box {}
-            "), Err(RuntimeError::new(SourceLoc::new(2, 25), "parse error: Class cannot inherit from itself")));
+            "), Err(RuntimeError::new(SourceLoc::new(2, 25), "parse error: A class cannot inherit from itself.")));
     }
 
     #[test]
@@ -1034,7 +1035,7 @@ mod tests {
         assert_eq!(interpret("
             var x = \"not a class\";
             class Box < x {}
-            "), Err(RuntimeError::new(SourceLoc::new(3, 19), "Superclass must be a class; instead found: \"not a class\"")));
+            "), Err(RuntimeError::new_with_details(SourceLoc::new(3, 19), "Superclass must be a class.", "Superclass must be a class; instead found: \"not a class\"")));
     }
 
     #[test]

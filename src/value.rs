@@ -80,10 +80,10 @@ impl Value {
         match self {
             BoolVal(true) => "true".into(),
             BoolVal(false) => "false".into(),
-            ClassVal(class_ref) => format!("<class {}>", class_ref.name()),
+            ClassVal(class_ref) => class_ref.name().to_string(),
             ClosureVal(closure) => format!("<fn {}>", closure.name()),
-            InstanceVal(instance_ref) => format!("<instance {}>", instance_ref.class_name()),
-            NativeFunctionVal(id) => format!("<native fn {}>", id),
+            InstanceVal(instance_ref) => format!("{} instance", instance_ref.class_name()),
+            NativeFunctionVal(_) => "<native fn>".to_string(),
             NilVal => "nil".into(),
             NumberVal(x) => format!("{}", x),
             StringVal(s) => s.deref().clone(),
@@ -427,13 +427,23 @@ impl From<RuntimeError> for ExecutionInterrupt {
 pub struct RuntimeError {
     pub source_loc: SourceLoc,
     pub message: String,
+    pub details: Option<String>,
 }
 
 impl RuntimeError {
     pub fn new(source_loc: SourceLoc, message: &str) -> RuntimeError {
         RuntimeError {
             source_loc,
-            message: message.into(),
+            message: message.to_string(),
+            details: None,
+        }
+    }
+
+    pub fn new_with_details(source_loc: SourceLoc, message: &str, details: &str) -> RuntimeError {
+        RuntimeError {
+            source_loc,
+            message: message.to_string(),
+            details: Some(details.to_string()),
         }
     }
 }
