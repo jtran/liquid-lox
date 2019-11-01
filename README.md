@@ -22,6 +22,16 @@ Custom features not mentioned in the book:
 
 - Unicode variable names
 
+#### Reference Tests
+
+To ensure correctness, I run against the [official test suite](https://github.com/munificent/craftinginterpreters/tree/master/test).
+
+Current status:
+
+- 169 tests passed
+- 74 tests failed
+- 2 failures are due to optional features and are false positives
+
 ## Building
 
 ```shell
@@ -49,3 +59,7 @@ lox
 ```shell
 cargo test
 ```
+
+Note: This runs the internal test suite.  I do not include the
+[reference tests](https://github.com/munificent/craftinginterpreters/tree/master/test)
+in this repo.
