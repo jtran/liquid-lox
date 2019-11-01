@@ -46,10 +46,12 @@ fn main() {
         ap.parse_args_or_exit();
     }
     if ! script_filename.is_empty() {
-        let had_runtime_error = run_file(&script_filename);
+        let run_result = run_file(&script_filename);
 
-        if had_runtime_error {
-            process::exit(70);
+        match run_result {
+            Ok(_) => (),
+            Err(RunError::RunParseError(_)) => process::exit(65),
+            Err(RunError::RunRuntimeError(_)) => process::exit(70),
         }
     }
     else {
@@ -79,7 +81,7 @@ fn run_repl() {
 }
 
 // Returns true if there was an error running the file.
-fn run_file(file_path: &str) -> bool {
+fn run_file(file_path: &str) -> Result<Value, RunError> {
     let mut file = File::open(file_path).unwrap_or_else(|_| panic!("source file not found: {}", file_path));
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap_or_else(|_| panic!("unable to read file: {}", file_path));
@@ -88,7 +90,7 @@ fn run_file(file_path: &str) -> bool {
     let result = run(&mut interpreter, contents, false);
     print_result(&result, false);
 
-    result.is_err()
+    result
 }
 
 fn run(interpreter: &mut Interpreter, source: String, for_repl: bool)
