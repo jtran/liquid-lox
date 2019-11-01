@@ -142,7 +142,7 @@ impl Resolver {
                     FunctionType::Plain
                     | FunctionType::Initializer
                     | FunctionType::Method => (),
-                    _ => return Err(ParseErrorCause::new_with_location(*loc, "return", "Cannot return from top-level code.")),
+                    FunctionType::NoFunction => return Err(ParseErrorCause::new_with_location(*loc, "return", "Cannot return from top-level code.")),
                 }
 
                 // TODO: This currently doesn't distinguish between returning
