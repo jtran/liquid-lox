@@ -315,11 +315,11 @@ impl Interpreter {
                 }
             }
             Expr::Set(object_expr, property_name, e, loc) => {
-                let value = self.evaluate(e)?;
                 let left_val = self.evaluate(object_expr)?;
 
                 match left_val {
                     Value::InstanceVal(mut instance_ref) => {
+                        let value = self.evaluate(e)?;
                         instance_ref.set(property_name, value.clone());
 
                         Ok(value)
@@ -807,6 +807,11 @@ mod tests {
             p.x = 1;
             p.y = 2;
             p.x + p.y;"), Ok(NumberVal(3.0)));
+    }
+
+    #[test]
+    fn test_instance_set_evaluation_order() {
+        assert_eq!(interpret("p.x = bar;"), Err(RuntimeError::new(SourceLoc::new(1, 1), "Undefined variable 'p'.")));
     }
 
     #[test]
