@@ -442,7 +442,7 @@ impl Interpreter {
             }
             Value::ClosureVal(closure_ref) => {
                 let fun_def = closure_ref.function_definition();
-                self.check_call_arity(fun_def.parameters.len(), args.len(), &fun_def.source_loc)?;
+                self.check_call_arity(fun_def.parameters.len(), args.len(), &loc)?;
                 // Create a new environment, enclosed by closure's environment.
                 let mut new_env = Environment::new_with_parent(Rc::clone(closure_ref.env()));
                 // Bind parameters to argument values.
