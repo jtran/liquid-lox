@@ -219,14 +219,14 @@ impl Resolver {
                 match self.class_type {
                     ClassType::PlainClass | ClassType::Subclass => (),
                     _ => {
-                        return Err(ParseErrorCause::new(*loc, "Cannot use \"super\" outside of a class"));
+                        return Err(ParseErrorCause::new_with_location(*loc, "super", "Cannot use 'super' outside of a class."));
                     }
                 }
 
                 match self.class_type {
                     ClassType::Subclass => (),
                     _ => {
-                        return Err(ParseErrorCause::new(*loc, "Cannot use \"super\" in class without a superclass"));
+                        return Err(ParseErrorCause::new_with_location(*loc, "super", "Cannot use 'super' in a class with no superclass."));
                     }
                 }
 
@@ -245,7 +245,7 @@ impl Resolver {
                     FunctionType::Initializer | FunctionType::Method => (),
                     _ => {
                         if identifier == "this" {
-                            return Err(ParseErrorCause::new(*loc, "Cannot use \"this\" outside of method body"));
+                            return Err(ParseErrorCause::new_with_location(*loc, "this", "Cannot use 'this' outside of method body."));
                         }
                     }
                 }

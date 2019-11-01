@@ -845,8 +845,8 @@ mod tests {
 
     #[test]
     fn test_this_outside_method_body() {
-        assert_eq!(interpret("print this;"), Err(RuntimeError::new(SourceLoc::new(1, 7), "parse error: Cannot use \"this\" outside of method body")));
-        assert_eq!(interpret("fun foo() { return this; }"), Err(RuntimeError::new(SourceLoc::new(1, 20), "parse error: Cannot use \"this\" outside of method body")));
+        assert_eq!(interpret("print this;"), Err(RuntimeError::new(SourceLoc::new(1, 7), "parse error: Cannot use 'this' outside of method body.")));
+        assert_eq!(interpret("fun foo() { return this; }"), Err(RuntimeError::new(SourceLoc::new(1, 20), "parse error: Cannot use 'this' outside of method body.")));
     }
 
     #[test]
@@ -1055,12 +1055,12 @@ mod tests {
 
     #[test]
     fn test_super_outside_method_body() {
-        assert_eq!(interpret("super.x;"), Err(RuntimeError::new(SourceLoc::new(1, 1), "parse error: Cannot use \"super\" outside of a class")));
-        assert_eq!(interpret("fun foo() { super.x; }"), Err(RuntimeError::new(SourceLoc::new(1, 13), "parse error: Cannot use \"super\" outside of a class")));
+        assert_eq!(interpret("super.x;"), Err(RuntimeError::new(SourceLoc::new(1, 1), "parse error: Cannot use 'super' outside of a class.")));
+        assert_eq!(interpret("fun foo() { super.x; }"), Err(RuntimeError::new(SourceLoc::new(1, 13), "parse error: Cannot use 'super' outside of a class.")));
         assert_eq!(interpret("
             class Box {}
             fun foo() { super.x; }
-            "), Err(RuntimeError::new(SourceLoc::new(3, 25), "parse error: Cannot use \"super\" outside of a class")));
+            "), Err(RuntimeError::new(SourceLoc::new(3, 25), "parse error: Cannot use 'super' outside of a class.")));
     }
 
     #[test]
@@ -1070,6 +1070,6 @@ mod tests {
                 foo() {
                     super.x;
                 }
-            }"), Err(RuntimeError::new(SourceLoc::new(4, 21), "parse error: Cannot use \"super\" in class without a superclass")));
+            }"), Err(RuntimeError::new(SourceLoc::new(4, 21), "parse error: Cannot use 'super' in a class with no superclass.")));
     }
 }
