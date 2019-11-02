@@ -245,9 +245,9 @@ impl Resolver {
                 Ok(())
             }
             Expr::Variable(identifier, dist_cell, loc) => {
-                match self.function_type {
-                    FunctionType::Initializer | FunctionType::Method => (),
-                    _ => {
+                match self.class_type {
+                    ClassType::PlainClass | ClassType::Subclass => (),
+                    ClassType::NoClass => {
                         if identifier == "this" {
                             return Err(ParseErrorCause::new_with_location(*loc, "this", "Cannot use 'this' outside of method body."));
                         }
@@ -348,7 +348,7 @@ impl Resolver {
         // We can't just use the new one because it may be a plain function
         // nested inside of a method.  In that case, we want to keep the state
         // that we are in a method.
-        self.function_type = merge_function_types(enclosing_func_type, function_type);
+        self.function_type = function_type;
 
         self.begin_scope();
         let mut result = Ok(());
@@ -475,20 +475,6 @@ impl Resolver {
         }
 
         Ok(())
-    }
-}
-
-fn merge_function_types(old_ft: FunctionType, new_ft: FunctionType) -> FunctionType {
-    match (old_ft, new_ft) {
-        (FunctionType::NoFunction, _) => new_ft,
-        (FunctionType::Plain, FunctionType::NoFunction) => old_ft,
-        (FunctionType::Plain, _) => new_ft,
-        (FunctionType::Initializer, FunctionType::NoFunction) => old_ft,
-        (FunctionType::Initializer, FunctionType::Plain) => old_ft,
-        (FunctionType::Initializer, _) => new_ft,
-        (FunctionType::Method, FunctionType::NoFunction) => old_ft,
-        (FunctionType::Method, FunctionType::Plain) => old_ft,
-        (FunctionType::Method, _) => new_ft,
     }
 }
 

@@ -972,6 +972,20 @@ mod tests {
     }
 
     #[test]
+    fn test_can_return_value_from_function_nested_in_class_initializer() {
+        assert_eq!(interpret("
+            class Box {
+                init() {
+                    fun nested() {
+                        return 1.0;
+                    }
+                    this.value = nested();
+                }
+            }
+            Box().value;"), Ok(NumberVal(1.0)));
+    }
+
+    #[test]
     fn test_static_class_method() {
         assert_eq!(interpret("
             class Math {

@@ -28,8 +28,8 @@ To ensure correctness, I run against the [official test suite](https://github.co
 
 Current status:
 
-- 187 tests passed
-- 56 tests failed
+- 188 tests passed
+- 55 tests failed
 - 2 failures are due to optional features and are false positives
 
 ## Building
