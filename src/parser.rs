@@ -157,11 +157,11 @@ impl<'a> Parser<'a> {
         let mut parameters = Vec::new();
         if ! self.check(TokenType::RightParen) {
             loop {
-                if parameters.len() >= 8 {
-                    return Err(self.error_from_peek("Function cannot have more than 8 parameters"));
-                }
-
                 let (param_name, loc) = self.consume_identifier("Expected identifier in function parameters")?;
+
+                if parameters.len() >= 255 {
+                    return Err(ParseErrorCause::new_with_location(loc, &param_name, "Cannot have more than 255 parameters."));
+                }
 
                 parameters.push(Parameter::new(param_name, loc));
 
@@ -549,8 +549,8 @@ impl<'a> Parser<'a> {
         let mut args = Vec::new();
         if ! self.check(TokenType::RightParen) {
             loop {
-                if args.len() >= 16 {
-                    return Err(self.error_from_peek("Cannot have more than 16 arguments in a function call"));
+                if args.len() >= 255 {
+                    return Err(self.error_from_peek("Cannot have more than 255 arguments."));
                 }
                 args.push(self.expression()?);
 
