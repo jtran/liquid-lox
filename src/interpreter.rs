@@ -147,7 +147,7 @@ impl Interpreter {
 
                 Err(ExecutionInterrupt::Return(value))
             }
-            Stmt::Var(identifier, expr) => {
+            Stmt::Var(identifier, expr, _) => {
                 let value = self.evaluate(expr)?;
                 let mut env = self.env.deref().borrow_mut();
                 env.define(identifier, value);
@@ -744,6 +744,23 @@ mod tests {
                 x + 1;
             }
             do(1);"), Ok(NilVal));
+    }
+
+    #[test]
+    fn test_interpret_duplicate_variable_names() {
+        assert_eq!(interpret("
+            {
+                var x = 1;
+                var x = 2;
+            }"), Err(RuntimeError::new(SourceLoc::new(4, 21), "parse error: Variable with this name already declared in this scope.")));
+    }
+
+    #[test]
+    fn test_interpret_duplicate_function_parameters() {
+        assert_eq!(interpret("
+            fun foo(x, x) {
+                return x;
+            }"), Err(RuntimeError::new(SourceLoc::new(2, 24), "parse error: Variable with this name already declared in this scope.")));
     }
 
     #[test]

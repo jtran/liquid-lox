@@ -161,9 +161,9 @@ impl<'a> Parser<'a> {
                     return Err(self.error_from_peek("Function cannot have more than 8 parameters"));
                 }
 
-                let (param_name, _) = self.consume_identifier("Expected identifier in function parameters")?;
+                let (param_name, loc) = self.consume_identifier("Expected identifier in function parameters")?;
 
-                parameters.push(Parameter::new(param_name));
+                parameters.push(Parameter::new(param_name, loc));
 
                 if ! self.match_token(TokenType::Comma) {
                     break;
@@ -184,7 +184,7 @@ impl<'a> Parser<'a> {
 
     fn finish_var_declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
         // Consume the identifier.
-        let (id, _) = self.consume_identifier("Expected identifier after \"var\"")?;
+        let (id, loc) = self.consume_identifier("Expected identifier after \"var\"")?;
 
         let expr = match self.matches(&[TokenType::Equal]) {
             None => Expr::LiteralNil,
@@ -193,7 +193,7 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::Semicolon, "Expected semicolon after var declaration")?;
 
-        Ok(Stmt::Var(id, expr))
+        Ok(Stmt::Var(id, expr, loc))
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseErrorCause> {

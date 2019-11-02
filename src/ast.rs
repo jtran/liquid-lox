@@ -13,7 +13,7 @@ pub enum Stmt {
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
     Return(Expr, SourceLoc),
-    Var(String, Expr),
+    Var(String, Expr, SourceLoc),
     While(Expr, Box<Stmt>),
 }
 
@@ -55,6 +55,7 @@ pub struct FunctionDefinition {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Parameter {
     pub name: String,
+    pub source_loc: SourceLoc,
 }
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
@@ -122,9 +123,10 @@ impl FunctionDefinition {
 }
 
 impl Parameter {
-    pub fn new(name: String) -> Parameter {
+    pub fn new(name: String, source_loc: SourceLoc) -> Parameter {
         Parameter {
             name,
+            source_loc,
         }
     }
 }

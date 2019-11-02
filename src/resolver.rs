@@ -5,6 +5,7 @@ use std::ops::Deref;
 use crate::ast::*;
 use crate::environment::*;
 use crate::parser::ParseErrorCause;
+use crate::source_loc::*;
 use crate::value::*;
 
 pub fn resolve(statements: &mut Vec<Stmt>) -> Result<(), ParseErrorCause> {
@@ -73,7 +74,10 @@ impl Resolver {
         // Note: this behavior must match the Interpreter.
         resolver.begin_scope();
         for native_id in all_native_ids() {
-            resolver.define(&native_id.to_string())
+            let result = resolver.define(&native_id.to_string(), &SourceLoc::default());
+            if let Err(error) = result {
+                panic!("Resolver::new(): defining native function failed: {}", error.message);
+            }
         }
 
         resolver
@@ -123,7 +127,7 @@ impl Resolver {
             }
             Stmt::Expression(expr) => self.resolve_expression(expr),
             Stmt::Fun(fun_def) => {
-                self.define(&fun_def.name);
+                self.define(&fun_def.name, &fun_def.source_loc)?;
 
                 self.resolve_function(fun_def, FunctionType::Plain)
             }
@@ -158,10 +162,10 @@ impl Resolver {
 
                 self.resolve_expression(expr)
             }
-            Stmt::Var(name, expr) => {
-                self.declare(name);
+            Stmt::Var(name, expr, loc) => {
+                self.declare(name, loc)?;
                 self.resolve_expression(expr)?;
-                self.define(name);
+                self.define(name, loc)?;
 
                 Ok(())
             }
@@ -276,7 +280,7 @@ impl Resolver {
 
     fn resolve_class(&mut self,
                      class_def: &mut ClassDefinition) -> Result<(), ParseErrorCause> {
-        self.define(&class_def.name);
+        self.define(&class_def.name, &class_def.source_loc)?;
 
         // Superclass.
         match &class_def.superclass {
@@ -298,24 +302,30 @@ impl Resolver {
                 self.resolve_expression(super_expr)?;
 
                 self.begin_scope();
-                self.define("super");
+                let result = self.define("super", &class_def.source_loc);
+                if result.is_err() {
+                    // Ensure we preserve state.
+                    self.end_scope();
+                    return result;
+                }
             }
         }
 
         self.begin_scope();
-        self.define("this");
+        let mut result = self.define("this", &class_def.source_loc);
 
-        let mut result = Ok(());
-        for method in class_def.methods.iter_mut() {
-            let fun_type = if method.name == "init" {
-                FunctionType::Initializer
-            } else {
-                FunctionType::Method
-            };
+        if result.is_ok() {
+            for method in class_def.methods.iter_mut() {
+                let fun_type = if method.name == "init" {
+                    FunctionType::Initializer
+                } else {
+                    FunctionType::Method
+                };
 
-            result = self.resolve_function(method, fun_type);
-            if result.is_err() {
-                break;
+                result = self.resolve_function(method, fun_type);
+                if result.is_err() {
+                    break;
+                }
             }
         }
 
@@ -341,14 +351,19 @@ impl Resolver {
         self.function_type = merge_function_types(enclosing_func_type, function_type);
 
         self.begin_scope();
-        for parameter in &fun_def.parameters {
-            self.define(&parameter.name);
-        }
         let mut result = Ok(());
-        for mut body_statement in &mut fun_def.body {
-            result = self.resolve_statement(&mut body_statement);
+        for parameter in &fun_def.parameters {
+            result = self.define(&parameter.name, &parameter.source_loc);
             if result.is_err() {
                 break;
+            }
+        }
+        if result.is_ok() {
+            for mut body_statement in &mut fun_def.body {
+                result = self.resolve_statement(&mut body_statement);
+                if result.is_err() {
+                    break;
+                }
             }
         }
         self.end_scope();
@@ -414,33 +429,52 @@ impl Resolver {
         frame_index
     }
 
-    fn declare(&mut self, identifier: &str) {
+    fn declare(&mut self, identifier: &str, loc: &SourceLoc) -> Result<(), ParseErrorCause> {
         let scope = self.scopes.last_mut().expect("Resolver::declare: I'm trying to look up the most-local scope, but there are none");
         let var_resolve_state = VarResolveState {
             frame_index: scope.len(),
             defined_state: DeclaredVar,
         };
         ensure_scope_index_limit(scope.len());
+        let mut already_declared = false;
         scope.entry(identifier.to_string())
             .and_modify(|mut state| {
                 match state.defined_state {
                     UndefinedVar => state.defined_state = DeclaredVar,
-                    DeclaredVar | DefinedVar => panic!("Resolver::declare: I'm trying to declare something that's already declared: {}", identifier),
+                    DeclaredVar | DefinedVar => already_declared = true,
                 };
             })
             .or_insert(var_resolve_state);
+
+        if already_declared {
+            return Err(ParseErrorCause::new_with_location(*loc, identifier, "Variable with this name already declared in this scope."));
+        }
+
+        Ok(())
     }
 
-    fn define(&mut self, identifier: &str) {
+    fn define(&mut self, identifier: &str, loc: &SourceLoc) -> Result<(), ParseErrorCause> {
         let scope = self.scopes.last_mut().expect("Resolver::define: I'm trying to look up the most-local scope, but there are none");
         let var_resolve_state = VarResolveState {
             frame_index: scope.len(),
             defined_state: DefinedVar,
         };
         ensure_scope_index_limit(scope.len());
+        let mut already_defined = false;
         scope.entry(identifier.to_string())
-            .and_modify(|mut state| state.defined_state = DefinedVar )
+            .and_modify(|mut state| {
+                match state.defined_state {
+                    UndefinedVar | DeclaredVar => state.defined_state = DefinedVar,
+                    DefinedVar => already_defined = true,
+                }
+            })
             .or_insert(var_resolve_state);
+
+        if already_defined {
+            return Err(ParseErrorCause::new_with_location(*loc, identifier, "Variable with this name already declared in this scope."));
+        }
+
+        Ok(())
     }
 }
 
