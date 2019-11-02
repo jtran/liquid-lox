@@ -127,6 +127,8 @@ impl<'a> Parser<'a> {
                 Stmt::Fun(mut fun_def) => {
                     fun_def.fun_type = if is_class_method {
                         FunctionType::ClassMethod
+                    } else if fun_def.name == "init" {
+                        FunctionType::Initializer
                     } else {
                         FunctionType::Method
                     };

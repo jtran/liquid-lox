@@ -92,11 +92,11 @@ impl Interpreter {
                 let mut class_methods = FieldTable::new();
                 for method in class_def.methods.iter() {
                     let closure = ClosureRef::new(Rc::new(method.clone()), Rc::clone(&self.env));
-                    let container = if method.fun_type == FunctionType::ClassMethod {
-                        &mut class_methods
-                    }
-                    else {
-                        &mut methods
+                    let container = match method.fun_type {
+                        FunctionType::ClassMethod => &mut class_methods,
+                        FunctionType::Method
+                        | FunctionType::Initializer => &mut methods,
+                        FunctionType::PlainFunction => panic!("interpreter::exec(): Tried to interpret method with type: {:?}", method.fun_type),
                     };
                     container.set(&method.name, Value::ClosureVal(closure));
                 }
@@ -453,7 +453,25 @@ impl Interpreter {
                 let new_env_sptr = Rc::new(RefCell::new(new_env));
                 let return_value_result = self.exec_in_env(fun_def.body.as_slice(), new_env_sptr);
 
-                self.unwrap_return_value(return_value_result)
+                match fun_def.fun_type {
+                    // For initializers, always return the instance.
+                    FunctionType::Initializer => {
+                        let env = closure_ref.env().deref().borrow();
+                        // TODO: There must be a better way to find the
+                        // instance.
+                        let this_var_loc = VarLoc::new(0, 0);
+
+                        match env.get_at("this", this_var_loc) {
+                            Some(value) => Ok(value),
+                            None => panic!("Couldn't find 'this' in initializer environment at index 0: {:?}", fun_def),
+                        }
+                    }
+                    // For all other function types, use the return value.
+                    FunctionType::PlainFunction
+                    | FunctionType::Method
+                    | FunctionType::ClassMethod =>
+                        self.unwrap_return_value(return_value_result),
+                }
             }
             _ => Err(RuntimeError::new_with_details(loc, "Can only call functions and classes.", &format!("You can only call functions and classes, but you tried to call: {}", callee))),
         }
@@ -983,6 +1001,30 @@ mod tests {
                 }
             }
             Box().value;"), Ok(NumberVal(1.0)));
+    }
+
+    #[test]
+    fn test_calling_initializer_returns_this() {
+        assert_eq!(interpret("
+            class Box {
+                init() {
+                }
+            }
+            var x = Box();
+            x == x.init();"), Ok(BoolVal(true)));
+    }
+
+    #[test]
+    fn test_early_return_in_initializer_still_returns_this() {
+        assert_eq!(interpret("
+            class Box {
+                init() {
+                    return;
+                    this.x = 7;
+                }
+            }
+            var x = Box();
+            x == x.init();"), Ok(BoolVal(true)));
     }
 
     #[test]

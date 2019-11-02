@@ -62,6 +62,7 @@ pub struct Parameter {
 pub enum FunctionType {
     PlainFunction,
     Method,
+    Initializer,
     ClassMethod,
 }
 
