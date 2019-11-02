@@ -628,7 +628,7 @@ mod tests {
     fn test_interpret_var() {
         assert_eq!(interpret("var x;"), Ok(NilVal));
         assert_eq!(interpret("var x = 1;"), Ok(NilVal));
-        assert_eq!(interpret("var x = x;"), Err(RuntimeError::new(SourceLoc::new(1, 9), "parse error: Cannot read local variable in its own initializer: x")));
+        assert_eq!(interpret("var x = x;"), Err(RuntimeError::new(SourceLoc::new(1, 9), "parse error: Cannot read local variable in its own initializer.")));
     }
 
     #[test]
@@ -652,7 +652,7 @@ mod tests {
 
     #[test]
     fn test_interpret_assign_to_this() {
-        assert_eq!(interpret("var this = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 5), "parse error: Expected identifier after \"var\"")));
+        assert_eq!(interpret("var this = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 5), "parse error: Expect variable name.")));
         assert_eq!(interpret("this = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 6), "parse error: Invalid assignment target.")));
     }
 
@@ -873,8 +873,8 @@ mod tests {
 
     #[test]
     fn test_this_outside_method_body() {
-        assert_eq!(interpret("print this;"), Err(RuntimeError::new(SourceLoc::new(1, 7), "parse error: Cannot use 'this' outside of method body.")));
-        assert_eq!(interpret("fun foo() { return this; }"), Err(RuntimeError::new(SourceLoc::new(1, 20), "parse error: Cannot use 'this' outside of method body.")));
+        assert_eq!(interpret("print this;"), Err(RuntimeError::new(SourceLoc::new(1, 7), "parse error: Cannot use 'this' outside of a class.")));
+        assert_eq!(interpret("fun foo() { return this; }"), Err(RuntimeError::new(SourceLoc::new(1, 20), "parse error: Cannot use 'this' outside of a class.")));
     }
 
     #[test]
@@ -1084,7 +1084,7 @@ mod tests {
         // In the future, we could make arbitrary expressions work.
         assert_eq!(interpret("
             class Box < 2 {}
-            "), Err(RuntimeError::new(SourceLoc::new(2, 25), "parse error: Expected identifier after \"<\" in class declaration")));
+            "), Err(RuntimeError::new(SourceLoc::new(2, 25), "parse error: Expect superclass name.")));
     }
 
     #[test]

@@ -255,7 +255,7 @@ impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
 
         // Unterminated string.
         if self.is_at_end() {
-            util::error(&SourceLoc::new(self.line, self.column), "Unterminated string");
+            util::error(&SourceLoc::new(self.line, self.column), "Unterminated string.");
             return;
         }
 

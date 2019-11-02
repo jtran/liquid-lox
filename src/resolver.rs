@@ -222,7 +222,7 @@ impl Resolver {
             Expr::Super(super_dist_cell, _, loc) => {
                 match self.class_type {
                     ClassType::PlainClass | ClassType::Subclass => (),
-                    _ => {
+                    ClassType::NoClass => {
                         return Err(ParseErrorCause::new_with_location(*loc, "super", "Cannot use 'super' outside of a class."));
                     }
                 }
@@ -249,7 +249,7 @@ impl Resolver {
                     ClassType::PlainClass | ClassType::Subclass => (),
                     ClassType::NoClass => {
                         if identifier == "this" {
-                            return Err(ParseErrorCause::new_with_location(*loc, "this", "Cannot use 'this' outside of method body."));
+                            return Err(ParseErrorCause::new_with_location(*loc, "this", "Cannot use 'this' outside of a class."));
                         }
                     }
                 }
@@ -263,7 +263,7 @@ impl Resolver {
                             match resolve_state.defined_state {
                                 DefinedVar | UndefinedVar => (),
                                 DeclaredVar => {
-                                    return Err(ParseErrorCause::new(*loc, &format!("Cannot read local variable in its own initializer: {}", identifier)));
+                                    return Err(ParseErrorCause::new_with_location(*loc, identifier, "Cannot read local variable in its own initializer."));
                                 }
                             }
                         }

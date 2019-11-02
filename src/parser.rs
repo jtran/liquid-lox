@@ -106,11 +106,11 @@ impl<'a> Parser<'a> {
 
     fn finish_class_declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
         // The Class token has already been consumed.
-        let (id, loc) = self.consume_identifier("Expected identifier after \"class\"")?;
+        let (id, loc) = self.consume_identifier("Expect identifier after 'class'.")?;
 
         // Optional superclass.
         let superclass = if self.match_token(TokenType::Less) {
-            let (super_id, super_loc) = self.consume_identifier("Expected identifier after \"<\" in class declaration")?;
+            let (super_id, super_loc) = self.consume_identifier("Expect superclass name.")?;
             let super_expr = Expr::Variable(super_id, Cell::new(VarLoc::placeholder()), super_loc);
 
             Some(Box::new(super_expr))
@@ -118,7 +118,7 @@ impl<'a> Parser<'a> {
             None
         };
 
-        self.consume(TokenType::LeftBrace, "Expected left brace after class name")?;
+        self.consume(TokenType::LeftBrace, "Expect '{' after class name.")?;
         let mut methods = Vec::new();
         while ! self.check(TokenType::RightBrace) && ! self.is_at_end() {
             let is_class_method = self.match_token(TokenType::Class);
@@ -133,11 +133,11 @@ impl<'a> Parser<'a> {
                     methods.push(fun_def);
                 }
                 _ => {
-                    return Err(self.error_from_last("Expected method definition in class"));
+                    return Err(self.error_from_last("Expect method definition in class."));
                 }
             }
         }
-        self.consume(TokenType::RightBrace, "Expected right brace after class method body")?;
+        self.consume(TokenType::RightBrace, "Expect '}' after class method body.")?;
 
         let class_def = ClassDefinition {
             name: id,
@@ -151,13 +151,13 @@ impl<'a> Parser<'a> {
 
     fn finish_fun_declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
         // The Fun token has already been consumed.
-        let (id, loc) = self.consume_identifier("Expected identifier after \"fun\"")?;
+        let (id, loc) = self.consume_identifier("Expect identifier after 'fun'.")?;
 
-        self.consume(TokenType::LeftParen, "Expected left parenthesis after function name")?;
+        self.consume(TokenType::LeftParen, "Expect '(' after function name.")?;
         let mut parameters = Vec::new();
         if ! self.check(TokenType::RightParen) {
             loop {
-                let (param_name, loc) = self.consume_identifier("Expected identifier in function parameters")?;
+                let (param_name, loc) = self.consume_identifier("Expect identifier in function parameters.")?;
 
                 if parameters.len() >= 255 {
                     return Err(ParseErrorCause::new_with_location(loc, &param_name, "Cannot have more than 255 parameters."));
@@ -170,9 +170,9 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        self.consume(TokenType::RightParen, "Expected right parenthesis after function parameters")?;
+        self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
 
-        self.consume(TokenType::LeftBrace, "Expected left brace after function parameters")?;
+        self.consume(TokenType::LeftBrace, "Expect '{' before function body.")?;
         let body = self.finish_block()?;
 
         let fun_def = FunctionDefinition::new(id, parameters, body,
@@ -184,14 +184,14 @@ impl<'a> Parser<'a> {
 
     fn finish_var_declaration(&mut self) -> Result<Stmt, ParseErrorCause> {
         // Consume the identifier.
-        let (id, loc) = self.consume_identifier("Expected identifier after \"var\"")?;
+        let (id, loc) = self.consume_identifier("Expect variable name.")?;
 
         let expr = match self.matches(&[TokenType::Equal]) {
             None => Expr::LiteralNil,
             Some(_) => self.expression()?,
         };
 
-        self.consume(TokenType::Semicolon, "Expected semicolon after var declaration")?;
+        self.consume(TokenType::Semicolon, "Expect ';' after var declaration.")?;
 
         Ok(Stmt::Var(id, expr, loc))
     }
@@ -223,14 +223,14 @@ impl<'a> Parser<'a> {
         if self.in_loops == 0 {
             return Err(self.error_from_last("Found break statement outside of loop body"));
         }
-        self.consume(TokenType::Semicolon, "Expected semicolon after break")?;
+        self.consume(TokenType::Semicolon, "Expect ';' after break.")?;
 
         Ok(Stmt::Break(loc))
     }
 
     fn finish_for_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
         // The For token has already been consumed.
-        self.consume(TokenType::LeftParen, "Expected left parenthesis after for")?;
+        self.consume(TokenType::LeftParen, "Expect '(' after for.")?;
         let initializer = if self.match_token(TokenType::Semicolon) {
             None
         }
@@ -246,14 +246,14 @@ impl<'a> Parser<'a> {
         else {
             self.expression()?
         };
-        self.consume(TokenType::Semicolon, "Expected semicolon after for-loop condition")?;
+        self.consume(TokenType::Semicolon, "Expect ';' after for-loop condition.")?;
         let increment = if self.check(TokenType::RightParen) {
             None
         }
         else {
             Some(self.expression()?)
         };
-        self.consume(TokenType::RightParen, "Expected right parenthesis after for-loop increment")?;
+        self.consume(TokenType::RightParen, "Expect ')' after for-loop increment.")?;
         let loop_body = self.loop_body_statement()?;
 
         // Convert into while loop.
@@ -285,9 +285,9 @@ impl<'a> Parser<'a> {
     }
 
     fn finish_if_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
-        self.consume(TokenType::LeftParen, "Expected left parenthesis after if")?;
+        self.consume(TokenType::LeftParen, "Expect '(' after if.")?;
         let condition = self.expression()?;
-        self.consume(TokenType::RightParen, "Expected right parenthesis after if condition")?;
+        self.consume(TokenType::RightParen, "Expect ')' after if condition.")?;
 
         let then_stmt = self.statement()?;
 
@@ -308,7 +308,7 @@ impl<'a> Parser<'a> {
             statements.push(self.declaration()?);
         }
 
-        self.consume(TokenType::RightBrace, "Expected right brace after block")?;
+        self.consume(TokenType::RightBrace, "Expect '}' after block.")?;
 
         Ok(statements)
     }
@@ -316,7 +316,7 @@ impl<'a> Parser<'a> {
     fn finish_print_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
         // The Print token has already been consumed.
         let expr = self.expression()?;
-        self.consume(TokenType::Semicolon, "Expected semicolon after print value")?;
+        self.consume(TokenType::Semicolon, "Expect ';' after print value.")?;
 
         Ok(Stmt::Print(expr))
     }
@@ -329,16 +329,16 @@ impl<'a> Parser<'a> {
         else {
             self.expression()?
         };
-        self.consume(TokenType::Semicolon, "Expected semicolon after return expression")?;
+        self.consume(TokenType::Semicolon, "Expect ';' after return expression.")?;
 
         Ok(Stmt::Return(expr, loc))
     }
 
     fn finish_while_statement(&mut self) -> Result<Stmt, ParseErrorCause> {
         // The While token has already been consumed.
-        self.consume(TokenType::LeftParen, "Expected left parenthesis after while")?;
+        self.consume(TokenType::LeftParen, "Expect '(' after while.")?;
         let condition = self.expression()?;
-        self.consume(TokenType::RightParen, "Expected right parenthesis after while condition")?;
+        self.consume(TokenType::RightParen, "Expect ')' after while condition.")?;
         let body = self.loop_body_statement()?;
 
         Ok(Stmt::While(condition, Box::new(body)))
@@ -362,7 +362,7 @@ impl<'a> Parser<'a> {
         if ! (self.allow_trailing_expression && self.is_at_end())
             || self.check(TokenType::Semicolon)
         {
-            self.consume(TokenType::Semicolon, "Expected semicolon after expression")?;
+            self.consume(TokenType::Semicolon, "Expect ';' after expression.")?;
         }
 
         Ok(Stmt::Expression(expr))
@@ -391,7 +391,7 @@ impl<'a> Parser<'a> {
                             Ok(Expr::Assign(id, Cell::new(VarLoc::placeholder()), Box::new(right_expr), loc))
                         }
                     }
-                    _ => Err(self.error_from_last(&format!("Invalid assignment target; expected identifier, found: {:?}", &expr))),
+                    _ => Err(ParseErrorCause::new_with_location(loc, "=", "Invalid assignment target.")),
                 }
             }
         }
@@ -531,7 +531,7 @@ impl<'a> Parser<'a> {
             match self.matches(&[TokenType::Dot, TokenType::LeftParen]) {
                 None => break,
                 Some((TokenType::Dot, loc)) => {
-                    let (id, _) = self.consume_identifier("Expected property name after \".\"")?;
+                    let (id, _) = self.consume_identifier("Expect property name after '.'.")?;
                     expr = Expr::Get(Box::new(expr), id, loc);
                 }
                 Some((TokenType::LeftParen, loc)) => {
@@ -557,7 +557,7 @@ impl<'a> Parser<'a> {
                 if ! self.match_token(TokenType::Comma) { break; }
             }
         }
-        self.consume(TokenType::RightParen, "Expected right parenthesis after arguments")?;
+        self.consume(TokenType::RightParen, "Expect ')' after arguments.")?;
 
         Ok(Expr::Call(Box::new(expr), args, loc))
     }
@@ -608,7 +608,7 @@ impl<'a> Parser<'a> {
                 already_advanced = true;
 
                 let expr = self.expression()?;
-                self.consume(TokenType::RightParen, "Missing close parenthesis")?;
+                self.consume(TokenType::RightParen, "Missing close parenthesis.")?;
 
                 Expr::Grouping(Box::new(expr))
             }
@@ -621,8 +621,8 @@ impl<'a> Parser<'a> {
                         self.advance();
                         already_advanced = true;
 
-                        self.consume(TokenType::Dot, "Expected \".\" after \"super\"")?;
-                        let (id, _) = self.consume_identifier("Expected superclass method identifier after \"super.\"")?;
+                        self.consume(TokenType::Dot, "Expect '.' after 'super'.")?;
+                        let (id, _) = self.consume_identifier("Expect superclass method name.")?;
 
                         Expr::Super(Cell::new(VarLoc::placeholder()), id, loc)
                     }
@@ -631,7 +631,7 @@ impl<'a> Parser<'a> {
             _ => {
                 // We need to advance here to prevent looping forever.
                 self.advance();
-                return Err(self.error_from_last(&format!("Unexpected token: {:?}", token_type)));
+                return Err(self.error_from_last("Expect expression."));
             }
         };
 
@@ -720,11 +720,17 @@ impl<'a> Parser<'a> {
     }
 
     fn error_from_last(&self, message: &str) -> ParseErrorCause {
-        ParseErrorCause::new(self.previous_source_loc(), message)
+        match self.previous() {
+            Some(token) => ParseErrorCause::new_with_location(self.previous_source_loc(), token.lexeme, message),
+            None => ParseErrorCause::new(self.previous_source_loc(), message),
+        }
     }
 
     fn error_from_peek(&self, message: &str) -> ParseErrorCause {
-        ParseErrorCause::new(self.peek_source_loc(), message)
+        match self.peek() {
+            Some(token) => ParseErrorCause::new_with_location(self.peek_source_loc(), token.lexeme, message),
+            None => ParseErrorCause::new(self.peek_source_loc(), message),
+        }
     }
 
     fn is_at_end(&self) -> bool {
@@ -740,7 +746,7 @@ impl<'a> Parser<'a> {
     {
         match self.matches(&[token_type]) {
             Some(_) => Ok(()), // Expected.
-            None => Err(self.error_from_last(error_message)),
+            None => Err(self.error_from_peek(error_message)),
         }
     }
 
@@ -924,7 +930,7 @@ mod tests {
     #[test]
     fn test_parse_invalid() {
         let causes = vec![
-            ParseErrorCause::new(SourceLoc::new(1, 1), "Unexpected token: And"),
+            ParseErrorCause::new_with_location(SourceLoc::new(1, 1), "and", "Expect expression."),
         ];
         assert_eq!(parse("and;"), Err(ParseError::new(causes)));
     }
