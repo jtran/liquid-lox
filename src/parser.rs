@@ -70,7 +70,7 @@ impl<'a> Parser<'a> {
                 }
                 Err(error) => {
                     errors.push(error);
-                    // TODO: synchronize here.
+                    self.synchronize();
                 }
             }
         }
@@ -768,6 +768,27 @@ impl<'a> Parser<'a> {
 
         Ok((id.to_string(), loc))
     }
+
+    fn synchronize(&mut self) {
+        self.advance();
+
+        while !self.is_at_end() {
+            if let Some(token) = self.previous() {
+                match token.token_type {
+                    TokenType::Class
+                    | TokenType::Fun
+                    | TokenType::Var
+                    | TokenType::For
+                    | TokenType::If
+                    | TokenType::While
+                    | TokenType::Print
+                    | TokenType::Return => return,
+                    _ => (),
+                }
+            }
+            self.advance();
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -904,7 +925,6 @@ mod tests {
     fn test_parse_invalid() {
         let causes = vec![
             ParseErrorCause::new(SourceLoc::new(1, 1), "Unexpected token: And"),
-            ParseErrorCause::new(SourceLoc::new(1, 4), "Unexpected token: Semicolon"),
         ];
         assert_eq!(parse("and;"), Err(ParseError::new(causes)));
     }
