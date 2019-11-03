@@ -555,6 +555,7 @@ impl NativeFunction {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::error::*;
     use crate::parser::*;
     use crate::resolver;
     use crate::value::Value::*;

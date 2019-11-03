@@ -5,8 +5,8 @@ use std::rc::Rc;
 
 use crate::ast::*;
 use crate::environment::*;
+use crate::error::ParseError;
 use crate::field_table::*;
-use crate::parser::ParseError;
 use crate::source_loc::*;
 
 #[derive(Clone, PartialEq)]

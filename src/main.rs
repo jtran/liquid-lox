@@ -4,6 +4,7 @@ extern crate unicode_segmentation;
 
 mod ast;
 mod environment;
+mod error;
 mod field_table;
 mod interpreter;
 mod parser;
@@ -21,8 +22,8 @@ use std::process;
 
 use argparse::{ArgumentParser, Print, Store};
 
+use crate::error::*;
 use crate::interpreter::*;
-use crate::parser::*;
 use crate::value::*;
 
 enum RunError {

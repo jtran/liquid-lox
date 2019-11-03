@@ -5,7 +5,7 @@ use std::ops::Deref;
 
 use crate::ast::*;
 use crate::environment::*;
-use crate::parser::{ParseError, ParseErrorCause};
+use crate::error::*;
 use crate::source_loc::*;
 use crate::value::*;
 
