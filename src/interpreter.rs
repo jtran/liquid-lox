@@ -639,6 +639,11 @@ mod tests {
     }
 
     #[test]
+    fn test_interpret_unterminated_string_literal() {
+        assert_eq!(interpret("\"foo"), Err(RuntimeError::new(SourceLoc::new(1, 5), "parse error: Unterminated string.")));
+    }
+
+    #[test]
     fn test_interpret_operators() {
         assert_eq!(interpret("40 + 2;"), Ok(NumberVal(42.0)));
         assert_eq!(interpret("\"foo\" + \"bar\";"), Ok(StringVal(Rc::new("foobar".into()))));

@@ -9,7 +9,7 @@ use crate::token::*;
 
 pub fn parse(source: &str) -> Result<Vec<Stmt>, ParseError> {
     let mut scanner = Scanner::new(source);
-    let tokens = scanner.scan_tokens();
+    let tokens = scanner.scan_tokens()?;
     let mut parser = Parser::new(tokens);
 
     parser.parse()
@@ -17,7 +17,7 @@ pub fn parse(source: &str) -> Result<Vec<Stmt>, ParseError> {
 
 pub fn parse_repl_line(source: &str) -> Result<Vec<Stmt>, ParseError> {
     let mut scanner = Scanner::new(source);
-    let tokens = scanner.scan_tokens();
+    let tokens = scanner.scan_tokens()?;
     let mut parser = Parser::with_trailing_expression(tokens);
 
     parser.parse()
@@ -26,7 +26,7 @@ pub fn parse_repl_line(source: &str) -> Result<Vec<Stmt>, ParseError> {
 #[allow(dead_code)]
 pub fn parse_expression(code: &str) -> Result<Expr, ParseError> {
     let mut scanner = Scanner::new(code);
-    let tokens = scanner.scan_tokens();
+    let tokens = scanner.scan_tokens()?;
     let mut parser = Parser::new(tokens);
 
     parser.parse_expression()
@@ -860,7 +860,7 @@ mod tests {
     #[test]
     fn test_parse_comparison() {
         let mut scanner = Scanner::new("42 == 40 + 2");
-        let tokens = scanner.scan_tokens();
+        let tokens = scanner.scan_tokens().expect("Expected scanning to be successful");
         let mut parser = Parser::new(tokens);
         let ast = parser.expression();
         assert_eq!(ast, Ok(Binary(Box::new(LiteralNumber(42.0)),
