@@ -30,7 +30,7 @@ Current status:
 
 - 227 tests passed
 - 16 tests failed
-- 2 failures are due to optional features and are false positives
+- 3 failures are due to optional features and are false positives
 
 ## Building
 
