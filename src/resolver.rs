@@ -5,11 +5,11 @@ use std::ops::Deref;
 
 use crate::ast::*;
 use crate::environment::*;
-use crate::parser::ParseErrorCause;
+use crate::parser::{ParseError, ParseErrorCause};
 use crate::source_loc::*;
 use crate::value::*;
 
-pub fn resolve(statements: &mut Vec<Stmt>) -> Result<(), ParseErrorCause> {
+pub fn resolve(statements: &mut Vec<Stmt>) -> Result<(), ParseError> {
     let mut resolver = Resolver::new();
     resolver.resolve(statements)?;
 
@@ -17,7 +17,7 @@ pub fn resolve(statements: &mut Vec<Stmt>) -> Result<(), ParseErrorCause> {
 }
 
 #[allow(dead_code)]
-pub fn resolve_expression(expression: &mut Expr) -> Result<(), ParseErrorCause> {
+pub fn resolve_expression(expression: &mut Expr) -> Result<(), ParseError> {
     let mut resolver = Resolver::new();
     resolver.resolve_expression(expression)?;
 
@@ -84,12 +84,20 @@ impl Resolver {
         resolver
     }
 
-    pub fn resolve(&mut self, statements: &mut Vec<Stmt>) -> Result<(), ParseErrorCause> {
+    pub fn resolve(&mut self, statements: &mut Vec<Stmt>) -> Result<(), ParseError> {
+        let mut errors = Vec::new();
         for statement in statements.iter_mut() {
-            self.resolve_statement(statement)?;
+            let result = self.resolve_statement(statement);
+            if let Err(error) = result {
+                errors.push(error);
+            }
         }
 
-        Ok(())
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(ParseError::new(errors))
+        }
     }
 
     pub fn resolve_statement(&mut self, statement: &mut Stmt) -> Result<(), ParseErrorCause> {
