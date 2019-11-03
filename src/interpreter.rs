@@ -633,6 +633,11 @@ mod tests {
     }
 
     #[test]
+    fn test_interpret_literals_negative_zero() {
+        assert_eq!(interpret("\"\" + (-0);"), Ok(StringVal(Rc::new("-0".into()))));
+    }
+
+    #[test]
     fn test_interpret_operators() {
         assert_eq!(interpret("40 + 2;"), Ok(NumberVal(42.0)));
         assert_eq!(interpret("\"foo\" + \"bar\";"), Ok(StringVal(Rc::new("foobar".into()))));

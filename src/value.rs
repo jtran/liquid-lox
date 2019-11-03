@@ -85,7 +85,14 @@ impl Value {
             InstanceVal(instance_ref) => format!("{} instance", instance_ref.class_name()),
             NativeFunctionVal(_) => "<native fn>".to_string(),
             NilVal => "nil".into(),
-            NumberVal(x) => format!("{}", x),
+            NumberVal(x) => {
+                if *x == 0.0 && x.is_sign_negative() {
+                    // Preserve the negative sign for negative zero.
+                    format!("-{}", x.abs())
+                } else {
+                    format!("{}", x)
+                }
+            }
             StringVal(s) => s.deref().clone(),
         }
     }
@@ -339,7 +346,7 @@ impl Closure {
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // This is like inspect and tries to output the code you would need to
-        // write to get the value.
+        // write to get the value.  This is used in the REPL.
         match self {
             BoolVal(false) => write!(f, "false"),
             BoolVal(true) => write!(f, "true"),
@@ -359,7 +366,14 @@ impl fmt::Display for Value {
             }
             NativeFunctionVal(id) => write!(f, "{}", id),
             NilVal => write!(f, "nil"),
-            NumberVal(x) => write!(f, "{}", x),
+            NumberVal(x) => {
+                if *x == 0.0 && x.is_sign_negative() {
+                    // The reference implementation prints negative zero.
+                    write!(f, "-{}", x.abs())
+                } else {
+                    write!(f, "{}", x)
+                }
+            }
             StringVal(s) => write!(f, "\"{}\"", s.deref()),
         }
     }
