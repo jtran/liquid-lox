@@ -11,6 +11,34 @@ pub const VAR_LOC_MAX_DISTANCE_USIZE: usize = VAR_LOC_MAX_DISTANCE as usize;
 pub const VAR_LOC_MAX_INDEX: u16 = u16::MAX;
 pub const VAR_LOC_MAX_INDEX_USIZE: usize = VAR_LOC_MAX_INDEX as usize;
 
+// When you declare a variable, you need to know where in the current frame it
+// is stored in memory.  You cannot declare a new variable in a distant frame.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct FrameIndex(u16);
+
+impl FrameIndex {
+    pub fn new(index: u16) -> FrameIndex {
+        FrameIndex(index)
+    }
+
+    pub fn placeholder() -> FrameIndex {
+        FrameIndex(u16::MAX)
+    }
+
+    pub fn index(&self) -> u16 {
+        self.0
+    }
+
+    pub fn next(&self) -> Option<FrameIndex> {
+        match self.0.checked_add(1) {
+            None => None,
+            Some(new_index) => Some(FrameIndex::new(new_index)),
+        }
+    }
+}
+
+// When you use an already-declared variable, you need to know which frame it is
+// in, and where in the frame it is.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct VarLoc {
     distance: u16,
@@ -52,6 +80,18 @@ impl VarLoc {
     }
 }
 
+impl From<FrameIndex> for VarLoc {
+    fn from(frame_index: FrameIndex) -> VarLoc {
+        VarLoc::new(0, frame_index.index())
+    }
+}
+
+impl From<&VarLoc> for FrameIndex {
+    fn from(var_loc: &VarLoc) -> FrameIndex {
+        FrameIndex::new(var_loc.index())
+    }
+}
+
 // We store values in a Vec so that lookups are fast.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment {
@@ -74,12 +114,26 @@ impl Environment {
         }
     }
 
-    pub fn define(&mut self, _name: &str, value: Value) -> u16 {
-        let index = self.values.len();
+    pub fn next_frame_index(&self) -> FrameIndex {
+        let len = self.values.len();
+        if len >= usize::from(u16::MAX) {
+            panic!("Environment::next_frame_index(): frame overflow");
+        }
 
-        self.values.push(value);
+        FrameIndex::new(len as u16)
+    }
 
-        index as u16
+    pub fn define_at(&mut self, name: &str, frame_index: FrameIndex, value: Value) {
+        let index = usize::from(frame_index.index());
+        let len = self.values.len();
+
+        if index == len {
+            self.values.push(value);
+        } else if index < len {
+            self.values[index] = value;
+        } else {
+            panic!("Environment::define_at(): You tried to define at a higher index which would create a gap: len={}, index={}, name={}", len, index, name);
+        }
     }
 
     pub fn get_at(&self, name: &str, var_loc: VarLoc) -> Option<Value> {

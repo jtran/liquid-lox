@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use crate::environment::VarLoc;
+use crate::environment::{FrameIndex, VarLoc};
 use crate::source_loc::*;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -13,7 +13,7 @@ pub enum Stmt {
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
     Return(Expr, SourceLoc),
-    Var(String, Expr, SourceLoc),
+    Var(String, Cell<FrameIndex>, Expr, SourceLoc),
     While(Expr, Box<Stmt>),
 }
 

@@ -18,9 +18,13 @@ impl Interpreter {
     pub fn new() -> Interpreter {
         // Note: this behavior must match the Resolver.
         let mut globals = Environment::new_global();
+        let mut frame_index = globals.next_frame_index();
         for native_id in all_native_ids() {
-            globals.define(&native_id.to_string(),
-                           Value::NativeFunctionVal(native_id));
+            let next_index = frame_index.next();
+            globals.define_at(&native_id.to_string(),
+                              frame_index,
+                              Value::NativeFunctionVal(native_id));
+            frame_index = next_index.expect("Interpreter::new(): index for FrameIndex overflowed");
         }
 
         Interpreter {
@@ -56,13 +60,15 @@ impl Interpreter {
             }
             Stmt::Break(loc) => Err(ExecutionInterrupt::Break(*loc)),
             Stmt::Class(class_def) => {
-                let index = {
+                let class_frame_index = {
                     // Scope is to end mutable borrow of self.
                     let mut env = self.env.deref().borrow_mut();
+                    let frame_index = env.next_frame_index();
 
-                    env.define(&class_def.name, Value::NilVal)
+                    env.define_at(&class_def.name, frame_index, Value::NilVal);
+
+                    frame_index
                 };
-                let var_loc = VarLoc::new(0, index);
 
                 // Superclass.
                 let env_before_super = Rc::clone(&self.env);
@@ -75,7 +81,8 @@ impl Interpreter {
                             Value::ClassVal(ref class_ref) => {
                                 // Define "super".
                                 let mut new_env = self.new_env_from_current();
-                                new_env.define("super", superclass_val.clone());
+                                let frame_index = new_env.next_frame_index();
+                                new_env.define_at("super", frame_index, superclass_val.clone());
                                 self.env = Rc::new(RefCell::new(new_env));
 
                                 Some(class_ref.clone())
@@ -110,6 +117,7 @@ impl Interpreter {
                                               class_methods,
                                               methods);
                 let mut env = self.env.deref().borrow_mut();
+                let var_loc = VarLoc::from(class_frame_index);
                 env.assign_at(&class_def.name, var_loc, Value::ClassVal(class_ref))
                     .map(|_| Value::NilVal )
                     .map_err(|_| ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
@@ -119,7 +127,8 @@ impl Interpreter {
             Stmt::Fun(fun_def) => {
                 let closure = ClosureRef::new(Rc::new(fun_def.clone()), Rc::clone(&self.env));
                 let mut env = self.env.deref().borrow_mut();
-                env.define(&fun_def.name, Value::ClosureVal(closure));
+                let frame_index = env.next_frame_index();
+                env.define_at(&fun_def.name, frame_index, Value::ClosureVal(closure));
 
                 Ok(Value::NilVal)
             }
@@ -147,10 +156,10 @@ impl Interpreter {
 
                 Err(ExecutionInterrupt::Return(value))
             }
-            Stmt::Var(identifier, expr, _) => {
+            Stmt::Var(identifier, frame_index_cell, expr, _) => {
                 let value = self.evaluate(expr)?;
                 let mut env = self.env.deref().borrow_mut();
-                env.define(identifier, value);
+                env.define_at(identifier, frame_index_cell.get(), value);
 
                 Ok(Value::NilVal)
             }
@@ -446,8 +455,11 @@ impl Interpreter {
                 // Create a new environment, enclosed by closure's environment.
                 let mut new_env = Environment::new_with_parent(Rc::clone(closure_ref.env()));
                 // Bind parameters to argument values.
+                let mut frame_index = new_env.next_frame_index();
                 for (parameter, arg) in fun_def.parameters.iter().zip(args) {
-                    new_env.define(&parameter.name, arg);
+                    let next_index = frame_index.next();
+                    new_env.define_at(&parameter.name, frame_index, arg);
+                    frame_index = next_index.expect("eval_call: index for FrameIndex overflowed");
                 }
                 // Execute function body in new environment.
                 let new_env_sptr = Rc::new(RefCell::new(new_env));
@@ -779,6 +791,14 @@ mod tests {
             fun foo(x, x) {
                 return x;
             }"), Err(RuntimeError::new(SourceLoc::new(2, 24), "parse error: Variable with this name already declared in this scope.")));
+    }
+
+    #[test]
+    fn test_interpret_redefine_global_variable() {
+        assert_eq!(interpret("
+            var x = 1;
+            var x = 2;
+            x;"), Ok(NumberVal(2.0)));
     }
 
     #[test]
