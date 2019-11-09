@@ -398,7 +398,7 @@ impl Resolver {
                     let distance = (len - 1 - i) as u16;
 
                     return Ok(VarLoc::new(distance,
-                                          resolve_state.frame_index as u16));
+                                          resolve_state.frame_index as u8));
                 }
             }
         }
@@ -410,7 +410,7 @@ impl Resolver {
         assert!(len > 0);
         let distance = (len - 1) as u16;
 
-        Ok(VarLoc::new_global(distance, frame_index as u16))
+        Ok(VarLoc::new_global(distance, frame_index as u8))
     }
 
     fn begin_scope(&mut self) {
@@ -477,13 +477,13 @@ impl Resolver {
         if already_declared {
             if self.is_in_global_scope() {
                 // Refer to the previously declared global.
-                frame_index_cell.set(FrameIndex::new(frame_index as u16))
+                frame_index_cell.set(FrameIndex::new(frame_index as u8))
             } else {
                 return Err(ParseErrorCause::new_with_location(*loc, identifier, "Variable with this name already declared in this scope."));
             }
         } else {
             // Refer to the previously declared global.
-            frame_index_cell.set(FrameIndex::new(frame_index as u16));
+            frame_index_cell.set(FrameIndex::new(frame_index as u8));
         }
 
         Ok(())
@@ -518,7 +518,7 @@ impl Resolver {
 fn ensure_scope_index_limit(new_scope_len: usize,
                             identifier: &str,
                             loc: &SourceLoc) -> Result<(), ParseErrorCause> {
-    if new_scope_len >= VAR_LOC_MAX_INDEX_USIZE {
+    if new_scope_len > VAR_LOC_MAX_INDEX_USIZE {
         Err(ParseErrorCause::new_with_location(*loc, identifier, "Too many local variables in function."))
     } else {
         Ok(())

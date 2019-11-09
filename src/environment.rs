@@ -1,31 +1,31 @@
 use std::cell::RefCell;
 use std::ops::Deref;
 use std::rc::Rc;
-use std::u16;
+use std::{u8, u16};
 
 use crate::value::*;
 
 pub const VAR_LOC_MAX_DISTANCE: u16 = u16::MAX;
 pub const VAR_LOC_MAX_DISTANCE_USIZE: usize = VAR_LOC_MAX_DISTANCE as usize;
 
-pub const VAR_LOC_MAX_INDEX: u16 = 256;
+pub const VAR_LOC_MAX_INDEX: u8 = u8::MAX;
 pub const VAR_LOC_MAX_INDEX_USIZE: usize = VAR_LOC_MAX_INDEX as usize;
 
 // When you declare a variable, you need to know where in the current frame it
 // is stored in memory.  You cannot declare a new variable in a distant frame.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct FrameIndex(u16);
+pub struct FrameIndex(u8);
 
 impl FrameIndex {
-    pub fn new(index: u16) -> FrameIndex {
+    pub fn new(index: u8) -> FrameIndex {
         FrameIndex(index)
     }
 
     pub fn placeholder() -> FrameIndex {
-        FrameIndex(u16::MAX)
+        FrameIndex(u8::MAX)
     }
 
-    pub fn index(&self) -> u16 {
+    pub fn index(&self) -> u8 {
         self.0
     }
 
@@ -42,7 +42,7 @@ impl FrameIndex {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct VarLoc {
     distance: u16,
-    index: u16,
+    index: u8,
     unresolved: bool,
 }
 
@@ -55,7 +55,7 @@ impl VarLoc {
         }
     }
 
-    pub fn new(distance: u16, index: u16) -> VarLoc {
+    pub fn new(distance: u16, index: u8) -> VarLoc {
         VarLoc {
             distance,
             index,
@@ -63,7 +63,7 @@ impl VarLoc {
         }
     }
 
-    pub fn new_global(distance: u16, index: u16) -> VarLoc {
+    pub fn new_global(distance: u16, index: u8) -> VarLoc {
         VarLoc {
             distance,
             index,
@@ -75,7 +75,7 @@ impl VarLoc {
         self.distance
     }
 
-    pub fn index(&self) -> u16 {
+    pub fn index(&self) -> u8 {
         self.index
     }
 }
@@ -116,11 +116,13 @@ impl Environment {
 
     pub fn next_frame_index(&self) -> FrameIndex {
         let len = self.values.len();
-        if len >= usize::from(u16::MAX) {
+        // Be carefult to compare with a larger width.  But the resolver should
+        // have prevented this.
+        if len > usize::from(u8::MAX) {
             panic!("Environment::next_frame_index(): frame overflow");
         }
 
-        FrameIndex::new(len as u16)
+        FrameIndex::new(len as u8)
     }
 
     pub fn define_at(&mut self, name: &str, frame_index: FrameIndex, value: Value) {
@@ -150,7 +152,7 @@ impl Environment {
 
     // If there's a distance error (which is probably a bug in the resolver) a
     // true value is returned for the error.
-    fn get_at_distance(&self, index: u16, distance: u16) -> Result<Value, bool> {
+    fn get_at_distance(&self, index: u8, distance: u16) -> Result<Value, bool> {
         if distance == 0 {
             return self.values.get(usize::from(index)).cloned().ok_or(false);
         }
@@ -182,7 +184,7 @@ impl Environment {
     }
 
     // Returns an error result if the key isn't already defined.
-    fn assign_at_distance(&mut self, index: u16, distance: u16, new_value: Value)
+    fn assign_at_distance(&mut self, index: u8, distance: u16, new_value: Value)
         -> Result<(), bool>
     {
         if distance == 0 {
