@@ -189,9 +189,9 @@ impl Resolver {
 
     pub fn resolve_expression(&mut self, expression: &mut Expr) -> Result<(), ParseErrorCause> {
         match expression {
-            Expr::Assign(identifier, dist_cell, expr, _) => {
+            Expr::Assign(identifier, dist_cell, expr, loc) => {
                 self.resolve_expression(expr)?;
-                let var_loc = self.resolve_local_variable(identifier);
+                let var_loc = self.resolve_local_variable(identifier, loc)?;
                 dist_cell.set(var_loc);
 
                 Ok(())
@@ -243,7 +243,7 @@ impl Resolver {
                     }
                 }
 
-                let super_var_loc = self.resolve_local_variable("super");
+                let super_var_loc = self.resolve_local_variable("super", loc)?;
                 super_dist_cell.set(super_var_loc);
 
                 Ok(())
@@ -279,7 +279,7 @@ impl Resolver {
                     };
                 }
 
-                let var_loc = self.resolve_local_variable(identifier);
+                let var_loc = self.resolve_local_variable(identifier, loc)?;
                 dist_cell.set(var_loc);
 
                 Ok(())
@@ -383,7 +383,9 @@ impl Resolver {
         result
     }
 
-    fn resolve_local_variable(&mut self, identifier: &str) -> VarLoc {
+    fn resolve_local_variable(&mut self,
+                              identifier: &str,
+                              loc: &SourceLoc) -> Result<VarLoc, ParseErrorCause> {
         let len = self.scopes.len();
         let mut i = len;
         while i > 0 {
@@ -395,20 +397,20 @@ impl Resolver {
                 Some(resolve_state) => {
                     let distance = (len - 1 - i) as u16;
 
-                    return VarLoc::new(distance,
-                                       resolve_state.frame_index as u16);
+                    return Ok(VarLoc::new(distance,
+                                          resolve_state.frame_index as u16));
                 }
             }
         }
 
         // Couldn't resolve.  This should turn into a global variable access or
         // runtime error.
-        let frame_index = self.forward_reserve_global_var(identifier);
+        let frame_index = self.forward_reserve_global_var(identifier, loc)?;
         // There should always be a global scope.
         assert!(len > 0);
         let distance = (len - 1) as u16;
 
-        VarLoc::new_global(distance, frame_index as u16)
+        Ok(VarLoc::new_global(distance, frame_index as u16))
     }
 
     fn begin_scope(&mut self) {
@@ -426,20 +428,22 @@ impl Resolver {
         self.scopes.len() == 1
     }
 
-    fn forward_reserve_global_var(&mut self, identifier: &str) -> usize {
+    fn forward_reserve_global_var(&mut self,
+                                  identifier: &str,
+                                  loc: &SourceLoc) -> Result<usize, ParseErrorCause> {
         let scope = self.scopes.first_mut().expect("Resolver::forward_reserve_global_var: I'm trying to look up the top-most global scope, but there are none");
         let frame_index = scope.len();
         let var_resolve_state = VarResolveState {
             frame_index,
             defined_state: UndefinedVar,
         };
-        ensure_scope_index_limit(scope.len());
+        ensure_scope_index_limit(scope.len(), identifier, loc)?;
         match scope.entry(identifier.to_string()) {
             entry @ Entry::Vacant(_) => entry.or_insert(var_resolve_state),
             Entry::Occupied(_) => panic!("Resolver::forward_reserve_global_var: I'm trying to forward reserve something that's already declared: {}", identifier),
         };
 
-        frame_index
+        Ok(frame_index)
     }
 
     fn declare(&mut self,
@@ -452,7 +456,7 @@ impl Resolver {
             frame_index,
             defined_state: DeclaredVar,
         };
-        ensure_scope_index_limit(scope.len());
+        ensure_scope_index_limit(scope.len(), identifier, loc)?;
 
         let mut already_declared = false;
         scope.entry(identifier.to_string())
@@ -491,7 +495,7 @@ impl Resolver {
             frame_index: scope.len(),
             defined_state: DefinedVar,
         };
-        ensure_scope_index_limit(scope.len());
+        ensure_scope_index_limit(scope.len(), identifier, loc)?;
         let mut already_defined = false;
         scope.entry(identifier.to_string())
             .and_modify(|mut state| {
@@ -510,8 +514,13 @@ impl Resolver {
     }
 }
 
-fn ensure_scope_index_limit(scope_len: usize) {
-    if scope_len >= VAR_LOC_MAX_INDEX_USIZE {
-        panic!("Too many unique identifiers in single lexical scope: {}", scope_len);
+// The 256th local should fail.
+fn ensure_scope_index_limit(new_scope_len: usize,
+                            identifier: &str,
+                            loc: &SourceLoc) -> Result<(), ParseErrorCause> {
+    if new_scope_len >= VAR_LOC_MAX_INDEX_USIZE {
+        Err(ParseErrorCause::new_with_location(*loc, identifier, "Too many local variables in function."))
+    } else {
+        Ok(())
     }
 }

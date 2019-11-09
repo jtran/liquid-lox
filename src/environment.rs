@@ -8,7 +8,7 @@ use crate::value::*;
 pub const VAR_LOC_MAX_DISTANCE: u16 = u16::MAX;
 pub const VAR_LOC_MAX_DISTANCE_USIZE: usize = VAR_LOC_MAX_DISTANCE as usize;
 
-pub const VAR_LOC_MAX_INDEX: u16 = u16::MAX;
+pub const VAR_LOC_MAX_INDEX: u16 = 256;
 pub const VAR_LOC_MAX_INDEX_USIZE: usize = VAR_LOC_MAX_INDEX as usize;
 
 // When you declare a variable, you need to know where in the current frame it

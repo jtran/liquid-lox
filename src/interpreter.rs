@@ -805,6 +805,16 @@ mod tests {
     }
 
     #[test]
+    fn test_interpret_max_local_variables() {
+        let mut source = "fun f() {\n".to_string();
+        for i in 1..=256 {
+            source += &format!("var x{};\n", i);
+        }
+        source += "}";
+        assert_eq!(interpret(&source), Err(RuntimeError::new(SourceLoc::new(257, 5), "parse error: Too many local variables in function.")));
+    }
+
+    #[test]
     fn test_interpret_redefine_global_variable() {
         assert_eq!(interpret("
             var x = 1;
