@@ -15,6 +15,9 @@ mod token;
 mod util;
 mod value;
 
+#[cfg(test)]
+mod tests;
+
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
