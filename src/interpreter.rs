@@ -805,6 +805,26 @@ mod tests {
     }
 
     #[test]
+    fn test_interpret_max_function_parameters() {
+        let mut source = "fun f(".to_string();
+        for i in 1..=256 {
+            source += &format!("x{},\n", i);
+        }
+        source += ") {}";
+        assert_eq!(interpret(&source), Err(RuntimeError::new(SourceLoc::new(256, 1), "parse error: Cannot have more than 255 parameters.")));
+    }
+
+    #[test]
+    fn test_interpret_max_call_arguments() {
+        let mut source = "f(".to_string();
+        for i in 1..=256 {
+            source += &format!("{},\n", i);
+        }
+        source += ");";
+        assert_eq!(interpret(&source), Err(RuntimeError::new(SourceLoc::new(256, 1), "parse error: Cannot have more than 255 arguments.")));
+    }
+
+    #[test]
     fn test_interpret_max_local_variables() {
         let mut source = "fun f() {\n".to_string();
         for i in 1..=256 {
