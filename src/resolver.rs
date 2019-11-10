@@ -223,8 +223,11 @@ impl Resolver {
                 Ok(())
             }
             Expr::Set(object_expr, _, value_expr, _) => {
-                self.resolve_expression(value_expr)?;
+                // Note: This is in reverse order from the current reference
+                // implementation so that it matches the interpreter evaluation
+                // order.
                 self.resolve_expression(object_expr)?;
+                self.resolve_expression(value_expr)?;
 
                 Ok(())
             }
