@@ -1,5 +1,6 @@
 This is an interpreter for the Lox language from
-[Crafting Interpreters](https://www.craftinginterpreters.com/).  See the
+[Crafting Interpreters](https://www.craftinginterpreters.com/).  Lox is a
+dynamic, object-oriented language loosely based on JavaScript.  See the
 [language overview](https://www.craftinginterpreters.com/the-lox-language.html)
 for features of the language.
 
@@ -8,9 +9,24 @@ The priorities for this project are:
 1. Fun!
 2. Learning
 
+#### Reference Tests
+
+To ensure correctness, I run against the [official test suite](https://github.com/munificent/craftinginterpreters/tree/master/test).
+
+Current status:
+
+- 228 tests passed
+- 15 tests failed
+- 3 failures are due to optional features and are false positives
+
+#### Differences
+
+Because of my priorities, I may implement some things and not others.
+
 Optional challenges and features implemented:
 
-- Column number in source, in addition to line, is displayed in error messages
+- Pass the reference implementation's test suite (getting there, at least)
+- Column number of source, in addition to line number, is displayed in error messages
 - Plus operator coerces to string when one value is a string
 - Division by zero is a runtime error
 - REPL accepts expressions and statements
@@ -22,15 +38,9 @@ Custom features not mentioned in the book:
 
 - Unicode variable names
 
-#### Reference Tests
+Features I will probably never implement:
 
-To ensure correctness, I run against the [official test suite](https://github.com/munificent/craftinginterpreters/tree/master/test).
-
-Current status:
-
-- 228 tests passed
-- 15 tests failed
-- 3 failures are due to optional features and are false positives
+- Better runtime performance by using a bytecode virtual machine
 
 ## Building
 
