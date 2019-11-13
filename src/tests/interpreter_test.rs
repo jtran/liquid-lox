@@ -1,3 +1,4 @@
+use std::mem;
 use std::rc::Rc;
 
 use crate::error::*;
@@ -5,7 +6,7 @@ use crate::interpreter::*;
 use crate::parser::*;
 use crate::resolver;
 use crate::source_loc::*;
-use crate::value::{RuntimeError, Value};
+use crate::value::{ExecutionInterrupt, RuntimeError, Value};
 use crate::value::Value::*;
 
 fn interpret(code: &str) -> Result<Value, RuntimeError> {
@@ -30,6 +31,12 @@ fn eval(code: &str) -> Result<Value, RuntimeError> {
     let mut interpreter = Interpreter::new();
 
     interpreter.evaluate(&ast)
+}
+
+#[test]
+fn test_interpreter_size_of_internal_result() {
+    assert_eq!(mem::size_of::<Result<Value, RuntimeError>>(), 40);
+    assert_eq!(mem::size_of::<Result<Value, ExecutionInterrupt>>(), 48);
 }
 
 #[test]
@@ -643,7 +650,7 @@ fn test_class_inheriting_from_non_class() {
     assert_eq!(interpret("
         var x = \"not a class\";
         class Box < x {}
-        "), Err(RuntimeError::new_with_details(SourceLoc::new(3, 15), "Superclass must be a class.", "Superclass must be a class; instead found: \"not a class\"")));
+        "), Err(RuntimeError::new(SourceLoc::new(3, 15), "Superclass must be a class.")));
 }
 
 #[test]

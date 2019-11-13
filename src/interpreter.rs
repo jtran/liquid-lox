@@ -88,9 +88,8 @@ impl Interpreter {
                                 Some(class_ref.clone())
                             }
                             // TODO: Store and use the superclass source location.
-                            _ => return Err(ExecutionInterrupt::Error(RuntimeError::new_with_details(class_def.source_loc,
-                                            "Superclass must be a class.",
-                                            &format!("Superclass must be a class; instead found: {}", superclass_val)))),
+                            _ => return Err(ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
+                                            "Superclass must be a class."))),
                         }
                     }
                 };
@@ -195,9 +194,7 @@ impl Interpreter {
             }
             Expr::Binary(left, op, right, loc) => {
                 let left_val = self.evaluate(left)?;
-                let left_type = left_val.runtime_type();
                 let right_val = self.evaluate(right)?;
-                let right_type = right_val.runtime_type();
 
                 match op {
                     // Math operators.
@@ -213,20 +210,20 @@ impl Interpreter {
                             (_, StringVal(s2)) => {
                                 Ok(StringVal(Rc::new(format!("{}{}", left_val.to_runtime_string(), s2.deref()))))
                             }
-                            (NumberVal(_), _) => Err(RuntimeError::new_with_details(*loc, "Operands must be two numbers or two strings.", &format!("expected number but found {} evaluating plus in expression: {:?}", right_type, expr))),
-                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be two numbers or two strings.", &format!("expected number or string but found {} evaluating plus in expression: {:?}", left_type, expr))),
+                            (NumberVal(_), _) => Err(RuntimeError::new(*loc, "Operands must be two numbers or two strings.")),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be two numbers or two strings.")),
                         }
                     },
                     BinaryOperator::Minus => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(NumberVal(x1 - x2)),
-                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
                         }
                     },
                     BinaryOperator::Multiply => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(NumberVal(x1 * x2)),
-                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
                         }
                     },
                     BinaryOperator::Divide => {
@@ -239,7 +236,7 @@ impl Interpreter {
                                     Ok(NumberVal(x1 / x2))
                                 }
                             }
-                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
                         }
                     },
                     // Comparison operators.
@@ -248,25 +245,25 @@ impl Interpreter {
                     BinaryOperator::Less => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 < x2)),
-                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
                         }
                     },
                     BinaryOperator::LessEqual => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 <= x2)),
-                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
                         }
                     },
                     BinaryOperator::Greater => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 > x2)),
-                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
                         }
                     },
                     BinaryOperator::GreaterEqual => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 >= x2)),
-                            _ => Err(RuntimeError::new_with_details(*loc, "Operands must be numbers.", &format!("expected numbers but found {} and {} evaluating expression: {:?}", left_type, right_type, expr))),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
                         }
                     },
                 }
@@ -296,7 +293,7 @@ impl Interpreter {
                             None => Err(RuntimeError::new(*loc, &format!("Undefined property '{}'.", property_name))),
                         }
                     }
-                    _ => Err(RuntimeError::new_with_details(*loc, "Only instances have properties.", &format!("Only instances and classes have properties but found {} with type {}", left_val, left_val.runtime_type()))),
+                    _ => Err(RuntimeError::new(*loc, "Only instances have properties.")),
                 }
             }
             Expr::Grouping(e) => self.evaluate(e),
@@ -333,7 +330,7 @@ impl Interpreter {
 
                         Ok(value)
                     }
-                    _ => Err(RuntimeError::new_with_details(*loc, "Only instances have fields.", &format!("Only instances have fields to set but found {} with type {}", left_val, left_val.runtime_type()))),
+                    _ => Err(RuntimeError::new(*loc, "Only instances have fields.")),
                 }
             }
             Expr::Super(super_dist_cell, id, loc) => {
@@ -380,13 +377,12 @@ impl Interpreter {
             }
             Expr::Unary(op, e, loc) => {
                 let v = self.evaluate(e)?;
-                let right_type = v.runtime_type();
 
                 match op {
                     UnaryOperator::Minus => {
                         match v {
                             NumberVal(x) => Ok(NumberVal(-x)),
-                            _ => Err(RuntimeError::new_with_details(*loc, "Operand must be a number.", &format!("expected number but found {} evaluating expression: {:?}", right_type, expr))),
+                            _ => Err(RuntimeError::new(*loc, "Operand must be a number.")),
                         }
                     },
                     UnaryOperator::Not => Ok(BoolVal(!v.is_truthy())),
@@ -485,7 +481,7 @@ impl Interpreter {
                         self.unwrap_return_value(return_value_result),
                 }
             }
-            _ => Err(RuntimeError::new_with_details(loc, "Can only call functions and classes.", &format!("You can only call functions and classes, but you tried to call: {}", callee))),
+            _ => Err(RuntimeError::new(loc, "Can only call functions and classes.")),
         }
     }
 

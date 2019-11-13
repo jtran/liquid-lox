@@ -21,17 +21,6 @@ pub enum Value {
     StringVal(Rc<String>),
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub enum RuntimeType {
-    BoolType,
-    CallableType,
-    ClassType,
-    InstanceType,
-    NilType,
-    NumberType,
-    StringType,
-}
-
 use self::Value::*;
 
 impl Value {
@@ -60,19 +49,6 @@ impl Value {
             (NumberVal(x1), NumberVal(x2)) => x1 == x2,
             (StringVal(s1), StringVal(s2)) => s1.deref() == s2.deref(),
             (_, _) => false,
-        }
-    }
-
-    pub fn runtime_type(&self) -> RuntimeType {
-        match self {
-            BoolVal(_) => RuntimeType::BoolType,
-            ClassVal(_) => RuntimeType::ClassType,
-            ClosureVal(_) => RuntimeType::CallableType,
-            InstanceVal(_) => RuntimeType::InstanceType,
-            NativeFunctionVal(_) => RuntimeType::CallableType,
-            NilVal => RuntimeType::NilType,
-            NumberVal(_) => RuntimeType::NumberType,
-            StringVal(_) => RuntimeType::StringType,
         }
     }
 
@@ -404,21 +380,6 @@ impl fmt::Debug for Closure {
     }
 }
 
-impl fmt::Display for RuntimeType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use self::RuntimeType::*;
-        match self {
-            BoolType => write!(f, "bool"),
-            ClassType => write!(f, "class"),
-            CallableType => write!(f, "callable"),
-            InstanceType => write!(f, "instance"),
-            NilType => write!(f, "nil"),
-            NumberType => write!(f, "number"),
-            StringType => write!(f, "string"),
-        }
-    }
-}
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExecutionInterrupt {
     Error(RuntimeError),
@@ -442,7 +403,6 @@ impl From<RuntimeError> for ExecutionInterrupt {
 pub struct RuntimeError {
     pub source_loc: SourceLoc,
     pub message: String,
-    pub details: Option<String>,
 }
 
 impl RuntimeError {
@@ -450,15 +410,6 @@ impl RuntimeError {
         RuntimeError {
             source_loc,
             message: message.to_string(),
-            details: None,
-        }
-    }
-
-    pub fn new_with_details(source_loc: SourceLoc, message: &str, details: &str) -> RuntimeError {
-        RuntimeError {
-            source_loc,
-            message: message.to_string(),
-            details: Some(details.to_string()),
         }
     }
 }
