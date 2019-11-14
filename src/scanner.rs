@@ -15,6 +15,7 @@ lazy_static! {
         m.insert("and", And);
         m.insert("break", Break);
         m.insert("class", Class);
+        m.insert("continue", Continue);
         m.insert("else", Else);
         m.insert("false", False);
         m.insert("for", For);

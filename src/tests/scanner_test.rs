@@ -99,6 +99,9 @@ fn test_scan_keywords() {
     let mut s = Scanner::new("class");
     assert_eq!(s.scan_tokens(), Ok(vec![Token::new(TokenType::Class, "class", None, None, 1, 1),
                                         Token::new(TokenType::Eof, "", None, None, 1, 6)]));
+    let mut s = Scanner::new("continue");
+    assert_eq!(s.scan_tokens(), Ok(vec![Token::new(TokenType::Continue, "continue", None, None, 1, 1),
+                                        Token::new(TokenType::Eof, "", None, None, 1, 9)]));
     let mut s = Scanner::new("else");
     assert_eq!(s.scan_tokens(), Ok(vec![Token::new(TokenType::Else, "else", None, None, 1, 1),
                                         Token::new(TokenType::Eof, "", None, None, 1, 5)]));

@@ -30,7 +30,7 @@ Optional challenges and features implemented:
 - Plus operator coerces to string when one value is a string
 - Division by zero is a runtime error
 - REPL accepts expressions and statements
-- `break` statements inside loops
+- `break` and `continue` statements inside loops
 - Look up variables by index, instead of by name, which is much faster
 - Static class methods
 

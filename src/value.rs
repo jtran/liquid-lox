@@ -383,8 +383,9 @@ impl fmt::Debug for Closure {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExecutionInterrupt {
     Error(RuntimeError),
-    Break(SourceLoc),
     Return(Value),
+    Break(SourceLoc),
+    Continue(SourceLoc),
 }
 
 impl From<ParseError> for ExecutionInterrupt {
@@ -426,6 +427,7 @@ impl From<ExecutionInterrupt> for RuntimeError {
             // If you hit this error, it's probably due to a break statement
             // outside of a loop.  The parser should disallow this.
             ExecutionInterrupt::Break(_) => panic!("Unexpected break execution interrupt: {:?}", &interrupt),
+            ExecutionInterrupt::Continue(_) => panic!("Unexpected continue execution interrupt: {:?}", &interrupt),
             ExecutionInterrupt::Error(error) => error,
             ExecutionInterrupt::Return(_) => panic!("Unexpected return execution interrupt: {:?}", &interrupt),
         }

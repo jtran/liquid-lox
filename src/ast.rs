@@ -8,13 +8,14 @@ pub enum Stmt {
     Block(Vec<Stmt>),
     Break(SourceLoc),
     Class(ClassDefinition),
+    Continue(SourceLoc),
     Expression(Expr),
     Fun(FunctionDefinition),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
     Return(Expr, SourceLoc),
     Var(String, Cell<FrameIndex>, Expr, SourceLoc),
-    While(Expr, Box<Stmt>),
+    While(Expr, Box<Stmt>, Option<Box<Expr>>),
 }
 
 #[derive(Clone, Debug, PartialEq)]

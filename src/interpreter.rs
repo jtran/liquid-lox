@@ -122,6 +122,7 @@ impl Interpreter {
                     .map_err(|_| ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
                                     &format!("Undefined variable for class; this is probably an interpreter bug: {}", class_def.name))))
             }
+            Stmt::Continue(loc) => Err(ExecutionInterrupt::Continue(*loc)),
             Stmt::Expression(expr) => self.evaluate(expr).map_err(|err| err.into()),
             Stmt::Fun(fun_def) => {
                 let closure = ClosureRef::new(Rc::new(fun_def.clone()), Rc::clone(&self.env));
@@ -162,16 +163,20 @@ impl Interpreter {
 
                 Ok(Value::NilVal)
             }
-            Stmt::While(condition, body) => {
+            Stmt::While(condition, body, increment) => {
                 while self.evaluate(condition)?.is_truthy() {
                     let result = self.exec(body);
                     match result {
                         Ok(_) => (),
                         Err(ExecutionInterrupt::Break(_)) => break,
+                        Err(ExecutionInterrupt::Continue(_)) => (),
                         // Propagate any other kind of interrupt.
                         Err(ExecutionInterrupt::Error(_)) |
                         Err(ExecutionInterrupt::Return(_)) => return result,
                     };
+                    if let Some(inc_expr) = increment {
+                        self.evaluate(inc_expr)?;
+                    }
                 }
 
                 Ok(Value::NilVal)

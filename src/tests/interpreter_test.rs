@@ -202,6 +202,24 @@ fn test_interpret_top_level_break() {
 }
 
 #[test]
+fn test_interpret_top_level_continue() {
+    assert_eq!(interpret("1 + 2;\ncontinue;"), Err(RuntimeError::new(SourceLoc::new(2, 1), "parse error: Found continue statement outside of loop body")));
+}
+
+#[test]
+fn test_interpret_while_continue() {
+    assert_eq!(interpret("
+        var x = 0;
+        var y = 0;
+        while (x < 3) {
+            x = x + 1;
+            if (x < 3) continue;
+            y = y + 1;
+        }
+        y;"), Ok(NumberVal(1.0)));
+}
+
+#[test]
 fn test_interpret_for_loop() {
     assert_eq!(interpret("var x = 1;\nfor (var i = 0; i < 3; i = i + 1)\nx = x * 2;\nx;"), Ok(NumberVal(8.0)));
     assert_eq!(interpret("var x = 1;\nfor (var i = 0; i < 3; i = i + 1)\n{ x = x * 2; }\nx;"), Ok(NumberVal(8.0)));
@@ -215,6 +233,34 @@ fn test_interpret_for_loop_break() {
             if (x > 3) break;
         }
         x;"), Ok(NumberVal(4.0)));
+}
+
+#[test]
+fn test_interpret_for_loop_continue() {
+    assert_eq!(interpret("
+        var x = 0;
+        var y = 0;
+        var n = 0;
+        for (; x < 3 and n < 20; x = x + 1) {
+            n = n + 1;
+            if (x >= 1) continue;
+            y = y + 1;
+        }
+        y;"), Ok(NumberVal(1.0)));
+}
+
+#[test]
+fn test_interpret_for_loop_continue_still_increments() {
+    assert_eq!(interpret("
+        var x = 0;
+        var y = 0;
+        var n = 0;
+        for (; x < 3 and n < 20; x = x + 1) {
+            n = n + 1;
+            if (x >= 1) continue;
+            y = y + 1;
+        }
+        n == 3;"), Ok(BoolVal(true)));
 }
 
 #[test]

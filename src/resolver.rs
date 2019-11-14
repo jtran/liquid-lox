@@ -134,6 +134,7 @@ impl Resolver {
 
                 result
             }
+            Stmt::Continue(_) => Ok(()),
             Stmt::Expression(expr) => self.resolve_expression(expr),
             Stmt::Fun(fun_def) => {
                 self.define(&fun_def.name, &fun_def.source_loc)?;
@@ -178,9 +179,12 @@ impl Resolver {
 
                 Ok(())
             }
-            Stmt::While(condition, body) => {
+            Stmt::While(condition, body, inc) => {
                 self.resolve_expression(condition)?;
                 self.resolve_statement(body)?;
+                if let Some(inc_expr) = inc {
+                    self.resolve_expression(inc_expr)?;
+                }
 
                 Ok(())
             }
