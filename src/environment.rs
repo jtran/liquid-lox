@@ -92,6 +92,12 @@ impl From<&VarLoc> for FrameIndex {
     }
 }
 
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum LookupFailure {
+    NotDefined,
+    DistanceTooFar,
+}
+
 // We store values in a Vec so that lookups are fast.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment {
@@ -144,22 +150,21 @@ impl Environment {
         }
 
         match self.get_at_distance(var_loc.index, var_loc.distance) {
-            Err(true) => panic!("tried to look up a variable at a distance greater than exists: {} index={} distance={}", name, var_loc.index, var_loc.distance),
-            Err(false) => None,
+            Err(LookupFailure::DistanceTooFar) => panic!("tried to look up a variable at a distance greater than exists: {} index={} distance={}", name, var_loc.index, var_loc.distance),
+            Err(LookupFailure::NotDefined) => None,
             Ok(v) => Some(v),
         }
     }
 
-    // If there's a distance error (which is probably a bug in the resolver) a
-    // true value is returned for the error.
-    fn get_at_distance(&self, index: u8, distance: u16) -> Result<Value, bool> {
+    // If there's a distance error, it's probably a bug in the resolver.
+    fn get_at_distance(&self, index: u8, distance: u16) -> Result<Value, LookupFailure> {
         if distance == 0 {
-            return self.values.get(usize::from(index)).cloned().ok_or(false);
+            return self.values.get(usize::from(index)).cloned().ok_or(LookupFailure::NotDefined);
         }
 
         // TODO: implement this without recursion.
         match self.enclosing {
-            None => Err(true),
+            None => Err(LookupFailure::DistanceTooFar),
             Some(ref env_cell_rc) => {
                 let env = env_cell_rc.deref().borrow();
 
@@ -177,21 +182,21 @@ impl Environment {
         }
 
         match self.assign_at_distance(var_loc.index, var_loc.distance, new_value) {
-            Err(true) => panic!("tried to assign to a variable at a distance greater than exists: {} index={} distance={}", name, var_loc.index, var_loc.distance),
-            Err(false) => Err(()),
+            Err(LookupFailure::DistanceTooFar) => panic!("tried to assign to a variable at a distance greater than exists: {} index={} distance={}", name, var_loc.index, var_loc.distance),
+            Err(LookupFailure::NotDefined) => Err(()),
             Ok(()) => Ok(())
         }
     }
 
     // Returns an error result if the key isn't already defined.
     fn assign_at_distance(&mut self, index: u8, distance: u16, new_value: Value)
-        -> Result<(), bool>
+        -> Result<(), LookupFailure>
     {
         if distance == 0 {
             let usize_index = usize::from(index);
             if usize_index >= self.values.len() {
                 // Not found.
-                return Err(false);
+                return Err(LookupFailure::NotDefined);
             }
 
             // Assign at this level.
@@ -202,7 +207,7 @@ impl Environment {
 
         // TODO: implement this without recursion.
         match self.enclosing {
-            None => Err(true),
+            None => Err(LookupFailure::DistanceTooFar),
             Some(ref env_cell_rc) => {
                 let mut env = env_cell_rc.deref().borrow_mut();
 
