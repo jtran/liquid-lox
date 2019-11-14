@@ -101,7 +101,7 @@ enum LookupFailure {
 // We store values in a Vec so that lookups are fast.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Environment {
-    values: Vec<Value>,
+    values: Vec<Option<Value>>,
     enclosing: Option<Rc<RefCell<Environment>>>,
 }
 
@@ -131,16 +131,22 @@ impl Environment {
         FrameIndex::new(len as u8)
     }
 
-    pub fn define_at(&mut self, name: &str, frame_index: FrameIndex, value: Value) {
+    pub fn define_at(&mut self, _name: &str, frame_index: FrameIndex, value: Value) {
         let index = usize::from(frame_index.index());
-        let len = self.values.len();
+        let mut len = self.values.len();
 
-        if index == len {
-            self.values.push(value);
-        } else if index < len {
-            self.values[index] = value;
-        } else {
-            panic!("Environment::define_at(): You tried to define at a higher index which would create a gap: len={}, index={}, name={}", len, index, name);
+        loop {
+            if index == len {
+                self.values.push(Some(value));
+                break;
+            } else if index < len {
+                self.values[index] = Some(value);
+                break;
+            }
+
+            // We're defining after a gap, so we need to fill the gap.
+            self.values.push(None);
+            len += 1;
         }
     }
 
@@ -159,7 +165,11 @@ impl Environment {
     // If there's a distance error, it's probably a bug in the resolver.
     fn get_at_distance(&self, index: u8, distance: u16) -> Result<Value, LookupFailure> {
         if distance == 0 {
-            return self.values.get(usize::from(index)).cloned().ok_or(LookupFailure::NotDefined);
+            return match self.values.get(usize::from(index)) {
+                None => Err(LookupFailure::NotDefined),
+                Some(None) => Err(LookupFailure::NotDefined),
+                Some(Some(v)) => Ok(v.clone())
+            };
         }
 
         // TODO: implement this without recursion.
@@ -200,7 +210,7 @@ impl Environment {
             }
 
             // Assign at this level.
-            self.values[usize_index] = new_value;
+            self.values[usize_index] = Some(new_value);
 
             return Ok(());
         }

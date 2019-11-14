@@ -351,6 +351,19 @@ fn test_interpret_assign_to_global_variable_when_not_resolvable() {
 }
 
 #[test]
+fn test_interpret_assign_other_global_variable_when_not_resolvable_is_forward_declared() {
+    assert_eq!(interpret("
+        fun showVariable() {
+            return global;
+        }
+
+        var otherGlobal = 1;
+        var global = \"after\";
+        showVariable();
+        "), Ok(StringVal(Rc::new("after".to_string()))));
+}
+
+#[test]
 fn test_interpret_top_level_return() {
     assert_eq!(interpret("1 + 2;\nreturn;"), Err(RuntimeError::new(SourceLoc::new(2, 1), "parse error: Cannot return from top-level code.")));
 }
