@@ -87,8 +87,7 @@ fn test_parse_statements() {
 fn test_parse_while_loop_break() {
     let loc = SourceLoc::new(1, 14);
     assert_eq!(parse("while (true) break;"), Ok(vec![Stmt::While(LiteralBool(true),
-                                                                 Box::new(Stmt::Break(loc)),
-                                                                 None)]));
+                                                                 Box::new(Stmt::Break(loc)))]));
     assert!(parse("for (;;) if (true) break;").is_ok());
     assert!(parse("while (true) if (true) break;").is_ok());
     assert!(parse("while (true) while(true) break;").is_ok());

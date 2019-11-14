@@ -15,7 +15,8 @@ pub enum Stmt {
     Print(Expr),
     Return(Expr, SourceLoc),
     Var(String, Cell<FrameIndex>, Expr, SourceLoc),
-    While(Expr, Box<Stmt>, Option<Box<Expr>>),
+    While(Expr, Box<Stmt>),
+    WhileIncrement(Expr, Box<Stmt>, Box<Expr>),
 }
 
 #[derive(Clone, Debug, PartialEq)]

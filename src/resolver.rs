@@ -179,12 +179,16 @@ impl Resolver {
 
                 Ok(())
             }
-            Stmt::While(condition, body, inc) => {
+            Stmt::While(condition, body) => {
                 self.resolve_expression(condition)?;
                 self.resolve_statement(body)?;
-                if let Some(inc_expr) = inc {
-                    self.resolve_expression(inc_expr)?;
-                }
+
+                Ok(())
+            }
+            Stmt::WhileIncrement(condition, body, increment) => {
+                self.resolve_expression(condition)?;
+                self.resolve_statement(body)?;
+                self.resolve_expression(increment)?;
 
                 Ok(())
             }

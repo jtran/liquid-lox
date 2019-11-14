@@ -272,7 +272,10 @@ impl<'a> Parser<'a> {
         let loop_body = self.loop_body_statement()?;
 
         // Convert into while loop.
-        let while_loop = Stmt::While(condition, Box::new(loop_body), increment);
+        let while_loop = match increment {
+            None => Stmt::While(condition, Box::new(loop_body)),
+            Some(inc_expr) => Stmt::WhileIncrement(condition, Box::new(loop_body), inc_expr),
+        };
 
         match initializer {
             None => Ok(while_loop),
@@ -340,7 +343,7 @@ impl<'a> Parser<'a> {
         self.consume(TokenType::RightParen, "Expect ')' after while condition.")?;
         let body = self.loop_body_statement()?;
 
-        Ok(Stmt::While(condition, Box::new(body), None))
+        Ok(Stmt::While(condition, Box::new(body)))
     }
 
     // Parses a statement while also tracking that we are inside a loop body.

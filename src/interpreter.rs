@@ -163,7 +163,7 @@ impl Interpreter {
 
                 Ok(Value::NilVal)
             }
-            Stmt::While(condition, body, increment) => {
+            Stmt::While(condition, body) => {
                 while self.evaluate(condition)?.is_truthy() {
                     let result = self.exec(body);
                     match result {
@@ -174,9 +174,22 @@ impl Interpreter {
                         Err(ExecutionInterrupt::Error(_)) |
                         Err(ExecutionInterrupt::Return(_)) => return result,
                     };
-                    if let Some(inc_expr) = increment {
-                        self.evaluate(inc_expr)?;
-                    }
+                }
+
+                Ok(Value::NilVal)
+            }
+            Stmt::WhileIncrement(condition, body, increment) => {
+                while self.evaluate(condition)?.is_truthy() {
+                    let result = self.exec(body);
+                    match result {
+                        Ok(_) => (),
+                        Err(ExecutionInterrupt::Break(_)) => break,
+                        Err(ExecutionInterrupt::Continue(_)) => (),
+                        // Propagate any other kind of interrupt.
+                        Err(ExecutionInterrupt::Error(_)) |
+                        Err(ExecutionInterrupt::Return(_)) => return result,
+                    };
+                    self.evaluate(increment)?;
                 }
 
                 Ok(Value::NilVal)
