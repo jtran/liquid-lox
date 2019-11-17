@@ -80,9 +80,9 @@ pub struct ClassRef(pub Rc<RuntimeClass>);
 impl ClassRef {
     pub fn new(name: &str,
                superclass: Option<ClassRef>,
-               class_methods: FieldTable,
+               fields: FieldTable,
                methods: FieldTable) -> ClassRef {
-        let rt_class = RuntimeClass::new(name, superclass, class_methods, methods);
+        let rt_class = RuntimeClass::new(name, superclass, fields, methods);
 
         ClassRef(Rc::new(rt_class))
     }
@@ -122,19 +122,19 @@ impl PartialEq for ClassRef {
 pub struct RuntimeClass {
     name: String,
     superclass: Option<ClassRef>,
+    fields: FieldTable,
     methods: FieldTable,
-    class_methods: FieldTable,
 }
 
 impl RuntimeClass {
     pub fn new(name: &str,
                superclass: Option<ClassRef>,
-               class_methods: FieldTable,
+               fields: FieldTable,
                methods: FieldTable) -> RuntimeClass {
         RuntimeClass {
             name: name.to_string(),
             superclass,
-            class_methods,
+            fields,
             methods,
         }
     }
@@ -168,7 +168,7 @@ impl RuntimeClass {
     }
 
     pub fn find_class_method(&self, name: &str) -> Option<Value> {
-        let v = self.class_methods.get(name);
+        let v = self.fields.get(name);
         if v.is_some() {
             return v;
         }
