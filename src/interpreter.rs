@@ -111,9 +111,14 @@ impl Interpreter {
                     self.env = env_before_super;
                 }
 
-                let class_ref = ClassRef::new(&class_def.name,
+                let metaclass = ClassRef::new(&format!("{} metaclass", class_def.name),
                                               superclass,
                                               class_methods,
+                                              FieldTable::new());
+
+                let class_ref = ClassRef::new(&class_def.name,
+                                              Some(metaclass),
+                                              FieldTable::new(),
                                               methods);
                 let mut env = self.env.deref().borrow_mut();
                 let var_loc = VarLoc::from(class_frame_index);

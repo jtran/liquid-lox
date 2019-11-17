@@ -29,13 +29,15 @@ Because of my priorities, I may implement some things and not others.
 Optional challenges and features implemented:
 
 - Pass the reference implementation's test suite (getting there, at least)
-- Column number of source, in addition to line number, is displayed in error messages
+- Column number of source, in addition to line number, is displayed in error
+  messages
 - Plus operator coerces to string when one value is a string
 - Division by zero is a runtime error
 - REPL accepts expressions and statements
 - `break` and `continue` statements inside loops
 - Look up variables by index, instead of by name, which is much faster
-- Static class methods
+- Static class methods that can access `this`
+- Get and set properties on classes using metaclasses
 
 Custom features not mentioned in the book:
 

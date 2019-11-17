@@ -144,6 +144,11 @@ impl RuntimeClass {
     }
 
     pub fn get(&self, name: &str, this_ref: ClassRef) -> Option<Value> {
+        let v = self.fields.get(name);
+        if v.is_some() {
+            return v;
+        }
+
         self.bound_class_method(name, this_ref)
     }
 
@@ -195,9 +200,7 @@ impl RuntimeClass {
 
                 Some(Value::ClosureVal(bound_method))
             }
-            // This isn't a method, but some other value set on the class.  We
-            // simply don't bind it.
-            Some(v) => Some(v),
+            Some(v) => panic!("Accessing a property and looking up a method resulted in a non-closure value: name={}, class={:?}, v={:?}", name, self, v),
         }
     }
 }
