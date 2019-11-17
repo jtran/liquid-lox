@@ -11,13 +11,16 @@ The priorities for this project are:
 
 #### Reference Tests
 
-To ensure correctness, I run against the [official test suite](https://github.com/munificent/craftinginterpreters/tree/master/test).
+To ensure correctness, I run this against the [official test suite](https://github.com/munificent/craftinginterpreters/tree/master/test).
 
 Current status:
 
-- 228 tests passed
-- 15 tests failed
+- 229 tests passed
+- 10 tests failed
 - 3 failures are due to optional features and are false positives
+- 7 failures are minor differences in parse error messages
+
+Like the reference implementation, we skip limit tests that don't apply.
 
 #### Differences
 
