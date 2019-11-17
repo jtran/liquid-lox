@@ -614,6 +614,14 @@ fn test_static_class_method() {
 }
 
 #[test]
+fn test_interpret_property_set_on_class() {
+    assert_eq!(interpret("
+        class Math {}
+        Math.pi = 3.14159;
+        Math.pi == 3.14159;"), Ok(BoolVal(true)));
+}
+
+#[test]
 fn test_static_class_method_can_access_this() {
     assert_eq!(interpret("
         class Math {

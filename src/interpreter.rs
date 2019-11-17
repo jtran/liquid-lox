@@ -342,6 +342,12 @@ impl Interpreter {
                 let left_val = self.evaluate(object_expr)?;
 
                 match left_val {
+                    Value::ClassVal(mut class_ref) => {
+                        let value = self.evaluate(e)?;
+                        class_ref.set(property_name, value.clone());
+
+                        Ok(value)
+                    }
                     Value::InstanceVal(mut instance_ref) => {
                         let value = self.evaluate(e)?;
                         instance_ref.set(property_name, value.clone());

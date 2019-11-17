@@ -75,7 +75,7 @@ impl Value {
 }
 
 #[derive(Clone, Debug)]
-pub struct ClassRef(pub Rc<RuntimeClass>);
+pub struct ClassRef(pub Rc<RefCell<RuntimeClass>>);
 
 impl ClassRef {
     pub fn new(name: &str,
@@ -84,31 +84,35 @@ impl ClassRef {
                methods: FieldTable) -> ClassRef {
         let rt_class = RuntimeClass::new(name, superclass, fields, methods);
 
-        ClassRef(Rc::new(rt_class))
+        ClassRef(Rc::new(RefCell::new(rt_class)))
     }
 
     pub fn get(&self, name: &str) -> Option<Value> {
-        self.0.get(name, self.clone())
+        self.0.borrow().get(name, self.clone())
+    }
+
+    pub fn set(&mut self, name: &str, new_value: Value) {
+        self.0.deref().borrow_mut().set(name, new_value)
     }
 
     pub fn find_method(&self, name: &str) -> Option<Value> {
-        self.0.find_method(name)
+        self.0.borrow().find_method(name)
     }
 
     pub fn bound_method(&self, name: &str, instance_ref: InstanceRef) -> Option<Value> {
-        self.0.bound_method(name, instance_ref)
+        self.0.borrow().bound_method(name, instance_ref)
     }
 
     pub fn find_class_method(&self, name: &str) -> Option<Value> {
-        self.0.find_class_method(name)
+        self.0.borrow().find_class_method(name)
     }
 
     pub fn bound_class_method(&self, name: &str, class_ref: ClassRef) -> Option<Value> {
-        self.0.bound_class_method(name, class_ref)
+        self.0.borrow().bound_class_method(name, class_ref)
     }
 
     pub fn name(&self) -> String {
-        self.0.name.clone()
+        self.0.borrow().name.clone()
     }
 }
 
@@ -141,6 +145,10 @@ impl RuntimeClass {
 
     pub fn get(&self, name: &str, this_ref: ClassRef) -> Option<Value> {
         self.bound_class_method(name, this_ref)
+    }
+
+    pub fn set(&mut self, name: &str, new_value: Value) {
+        self.fields.set(name, new_value);
     }
 
     pub fn find_method(&self, name: &str) -> Option<Value> {
@@ -187,7 +195,9 @@ impl RuntimeClass {
 
                 Some(Value::ClosureVal(bound_method))
             }
-            Some(v) => panic!("Accessing a property and looking up a method resulted in a non-closure value: name={}, class={:?}, v={:?}", name, self, v),
+            // This isn't a method, but some other value set on the class.  We
+            // simply don't bind it.
+            Some(v) => Some(v),
         }
     }
 }
