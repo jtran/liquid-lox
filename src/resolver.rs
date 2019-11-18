@@ -136,10 +136,10 @@ impl Resolver {
             }
             Stmt::Continue(_) => Ok(()),
             Stmt::Expression(expr) => self.resolve_expression(expr),
-            Stmt::Fun(fun_def) => {
-                self.define(&fun_def.name, &fun_def.source_loc)?;
+            Stmt::Fun(fun_decl) => {
+                self.define(&fun_decl.name, &fun_decl.fun_def.source_loc)?;
 
-                self.resolve_function(fun_def, FunctionType::Plain)
+                self.resolve_function(&mut fun_decl.fun_def, FunctionType::Plain)
             }
             Stmt::If(condition, then_stmt, else_stmt_opt) => {
                 self.resolve_expression(condition)?;
@@ -217,6 +217,9 @@ impl Resolver {
                 }
 
                 Ok(())
+            }
+            Expr::Function(fun_def) => {
+                self.resolve_function(fun_def, FunctionType::Plain)
             }
             Expr::Get(expr, _, _) => self.resolve_expression(expr),
             Expr::GetIndex(expr, index, _) => {
@@ -362,7 +365,7 @@ impl Resolver {
                     FunctionType::Method
                 };
 
-                result = self.resolve_function(method, fun_type);
+                result = self.resolve_function(&mut method.fun_def, fun_type);
                 if result.is_err() {
                     break;
                 }

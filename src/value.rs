@@ -64,7 +64,12 @@ impl Value {
             BoolVal(true) => "true".into(),
             BoolVal(false) => "false".into(),
             ClassVal(class_ref) => class_ref.name().to_string(),
-            ClosureVal(closure) => format!("<fn {}>", closure.name()),
+            ClosureVal(closure) => {
+                match closure.name() {
+                    Some(name) => format!("<fn {}>", name),
+                    None => "<fn>".to_string(),
+                }
+            }
             InstanceVal(instance_ref) => format!("{} instance", instance_ref.class_name()),
             NativeFunctionVal(_) => "<native fn>".to_string(),
             NilVal => "nil".into(),
@@ -273,14 +278,19 @@ impl Instance {
 pub struct ClosureRef(Rc<Closure>);
 
 impl ClosureRef {
-    pub fn new(fun_def: Rc<FunctionDefinition>,
+    pub fn new(name: Option<String>,
+               fun_def: Rc<FunctionDefinition>,
                env: Rc<RefCell<Environment>>) -> ClosureRef {
-        let closure = Closure(fun_def, env);
+        let closure = Closure::new(name, fun_def, env);
 
         ClosureRef(Rc::new(closure))
     }
 
-    pub fn name(&self) -> String {
+    fn new_from_closure(closure: Closure) -> ClosureRef {
+        ClosureRef(Rc::new(closure))
+    }
+
+    pub fn name(&self) -> Option<String> {
         self.0.name()
     }
 
@@ -293,17 +303,17 @@ impl ClosureRef {
     }
 
     pub fn function_definition(&self) -> &FunctionDefinition {
-        &(self.0).0
+        &self.0.fun_def
     }
 
     pub fn env(&self) -> &Rc<RefCell<Environment>> {
-        &(self.0).1
+        &self.0.env
     }
 
     pub fn bind(&self, this_value: Value) -> ClosureRef {
         let raw_closure = self.0.bind(this_value);
 
-        ClosureRef::new(raw_closure.0, raw_closure.1)
+        ClosureRef::new_from_closure(raw_closure)
     }
 }
 
@@ -314,28 +324,44 @@ impl PartialEq for ClosureRef {
 }
 
 #[derive(Clone, PartialEq)]
-pub struct Closure(Rc<FunctionDefinition>, Rc<RefCell<Environment>>);
+pub struct Closure {
+    name: Option<String>,
+    fun_def: Rc<FunctionDefinition>,
+    env: Rc<RefCell<Environment>>,
+}
 
 impl Closure {
-    pub fn name(&self) -> String {
-        self.0.name.clone()
+    pub fn new(name: Option<String>,
+               fun_def: Rc<FunctionDefinition>,
+               env: Rc<RefCell<Environment>>) -> Closure {
+        Closure {
+            name,
+            fun_def,
+            env,
+        }
+    }
+
+    pub fn name(&self) -> Option<String> {
+        self.name.clone()
     }
 
     pub fn arity(&self) -> usize {
-        self.0.parameters.len()
+        self.fun_def.parameters.len()
     }
 
     pub fn parameters(&self) -> &[Parameter] {
-        &self.0.parameters
+        &self.fun_def.parameters
     }
 
     pub fn bind(&self, this_value: Value) -> Closure {
         // Create a new environment.
-        let mut new_env = Environment::new_with_parent(Rc::clone(&self.1));
+        let mut new_env = Environment::new_with_parent(Rc::clone(&self.env));
         let this_frame_index = new_env.next_frame_index();
         new_env.define_at("this", this_frame_index, this_value);
 
-        Closure(Rc::clone(&self.0), Rc::new(RefCell::new(new_env)))
+        Closure::new(self.name.clone(),
+                     Rc::clone(&self.fun_def),
+                     Rc::new(RefCell::new(new_env)))
     }
 }
 
@@ -360,7 +386,10 @@ impl fmt::Display for Value {
                     .collect::<Vec<_>>()
                     .join(", ");
 
-                write!(f, "fun {}({}) {{...}}", closure.name(), param_names)
+                match closure.name() {
+                    Some(name) => write!(f, "fun {}({}) {{...}}", name, param_names),
+                    None => write!(f, "fun({}) {{...}}", param_names),
+                }
             }
             InstanceVal(instance_ref) => {
                 write!(f, "{}()", instance_ref.class_name())
@@ -402,7 +431,7 @@ impl fmt::Debug for Value {
 // environment, causing a stack overflow.
 impl fmt::Debug for Closure {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Closure({:?}, Rc(...))", self.0)
+        write!(f, "Closure({:?}, {:?}, Rc(...))", self.name, self.fun_def)
     }
 }
 

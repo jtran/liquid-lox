@@ -15,9 +15,9 @@ To ensure correctness, I run this against the [official test suite](https://gith
 
 Current status:
 
-- 228 tests passed
-- 11 tests failed
-- 4 failures are due to optional features and are false positives
+- 224 tests passed
+- 15 tests failed
+- 8 failures are due to optional features and are false positives
 - 7 failures are minor differences in parse error messages
 
 Like the reference implementation, we skip limit tests that don't apply.
@@ -35,6 +35,7 @@ Optional challenges and features implemented:
 - Division by zero is a runtime error
 - REPL accepts expressions and statements
 - `break` and `continue` statements inside loops
+- anonymous function expressions
 - Look up variables by index, instead of by name, which is much faster
 - Static class methods that can access `this`
 - Get and set properties on classes using metaclasses

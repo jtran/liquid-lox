@@ -97,12 +97,12 @@ impl Interpreter {
                 let mut methods = FieldTable::new();
                 let mut class_methods = FieldTable::new();
                 for method in class_def.methods.iter() {
-                    let closure = ClosureRef::new(Rc::new(method.clone()), Rc::clone(&self.env));
-                    let container = match method.fun_type {
+                    let closure = ClosureRef::new(Some(method.name.clone()), Rc::new(method.fun_def.clone()), Rc::clone(&self.env));
+                    let container = match method.fun_def.fun_type {
                         FunctionType::ClassMethod => &mut class_methods,
                         FunctionType::Method
                         | FunctionType::Initializer => &mut methods,
-                        FunctionType::PlainFunction => panic!("interpreter::exec(): Tried to interpret method with type: {:?}", method.fun_type),
+                        FunctionType::PlainFunction => panic!("interpreter::exec(): Tried to interpret method with type: {:?}", method.fun_def.fun_type),
                     };
                     container.set(&method.name, Value::ClosureVal(closure));
                 }
@@ -129,11 +129,11 @@ impl Interpreter {
             }
             Stmt::Continue(loc) => Err(ExecutionInterrupt::Continue(*loc)),
             Stmt::Expression(expr) => self.evaluate(expr).map_err(|err| err.into()),
-            Stmt::Fun(fun_def) => {
-                let closure = ClosureRef::new(Rc::new(fun_def.clone()), Rc::clone(&self.env));
+            Stmt::Fun(fun_decl) => {
+                let closure = ClosureRef::new(Some(fun_decl.name.clone()), Rc::new(fun_decl.fun_def.clone()), Rc::clone(&self.env));
                 let mut env = self.env.deref().borrow_mut();
                 let frame_index = env.next_frame_index();
-                env.define_at(&fun_def.name, frame_index, Value::ClosureVal(closure));
+                env.define_at(&fun_decl.name, frame_index, Value::ClosureVal(closure));
 
                 Ok(Value::NilVal)
             }
@@ -299,6 +299,11 @@ impl Interpreter {
                 }
 
                 self.eval_call(callee_val, arg_vals, *loc)
+            }
+            Expr::Function(fun_def) => {
+                let closure = ClosureRef::new(None, Rc::new(fun_def.deref().clone()), Rc::clone(&self.env));
+
+                Ok(Value::ClosureVal(closure))
             }
             Expr::Get(e, property_name, loc) => {
                 let left_val = self.evaluate(e)?;

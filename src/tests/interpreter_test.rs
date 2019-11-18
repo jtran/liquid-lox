@@ -257,6 +257,16 @@ fn test_interpret_if() {
 }
 
 #[test]
+fn test_interpret_declaration_in_if_then_body() {
+    assert_eq!(interpret("if (true) var x = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 11), "parse error: Expect expression.")));
+}
+
+#[test]
+fn test_interpret_declaration_in_if_else_body() {
+    assert_eq!(interpret("if (true) {} else var x = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 19), "parse error: Expect expression.")));
+}
+
+#[test]
 fn test_interpret_and_or() {
     // TODO: test short-circuiting.
     assert_eq!(interpret("1 and 2;"), Ok(NumberVal(2.0)));
@@ -296,6 +306,11 @@ fn test_interpret_while_continue() {
             y = y + 1;
         }
         y;"), Ok(NumberVal(1.0)));
+}
+
+#[test]
+fn test_interpret_declaration_in_while_body() {
+    assert_eq!(interpret("while (true) var y = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 14), "parse error: Expect expression.")));
 }
 
 #[test]
@@ -343,6 +358,11 @@ fn test_interpret_for_loop_continue_still_increments() {
 }
 
 #[test]
+fn test_interpret_declaration_in_for_body() {
+    assert_eq!(interpret("for (;;) var x = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 10), "parse error: Expect expression.")));
+}
+
+#[test]
 fn test_interpret_native_function_call() {
     assert_eq!(interpret("
         var t = clock();
@@ -365,6 +385,15 @@ fn test_interpret_no_implicit_return_value() {
             x + 1;
         }
         do(1);"), Ok(NilVal));
+}
+
+#[test]
+fn test_interpret_function_expression() {
+    assert_eq!(interpret("
+        var succ = fun(x) {
+            return x + 1;
+        };
+        succ(1);"), Ok(NumberVal(2.0)));
 }
 
 #[test]
