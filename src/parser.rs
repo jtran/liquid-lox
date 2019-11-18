@@ -386,6 +386,8 @@ impl<'a> Parser<'a> {
                 match expr {
                     Expr::Get(object_expr, property_name, _) =>
                         Ok(Expr::Set(object_expr, property_name, Box::new(right_expr), loc)),
+                    Expr::GetIndex(array_expr, index, _) =>
+                        Ok(Expr::SetIndex(array_expr, index, Box::new(right_expr), loc)),
                     Expr::Variable(id, _, _) => {
                         if id == "this" {
                             Err(ParseErrorCause::new_with_location(loc, "=", "Invalid assignment target."))
@@ -530,7 +532,9 @@ impl<'a> Parser<'a> {
         let mut expr = self.primary()?;
 
         loop {
-            match self.matches(&[TokenType::Dot, TokenType::LeftParen]) {
+            match self.matches(&[TokenType::Dot,
+                                 TokenType::LeftParen,
+                                 TokenType::LeftBracket]) {
                 None => break,
                 Some((TokenType::Dot, loc)) => {
                     let (id, _) = self.consume_identifier("Expect property name after '.'.")?;
@@ -538,6 +542,9 @@ impl<'a> Parser<'a> {
                 }
                 Some((TokenType::LeftParen, loc)) => {
                     expr = self.finish_call(expr, loc)?;
+                }
+                Some((TokenType::LeftBracket, loc)) => {
+                    expr = self.finish_get_index(expr, loc)?;
                 }
                 Some((token_type, loc)) => panic!("call: unexpected token type: {:?} loc={:?}", token_type, loc),
             }
@@ -562,6 +569,14 @@ impl<'a> Parser<'a> {
         self.consume(TokenType::RightParen, "Expect ')' after arguments.")?;
 
         Ok(Expr::Call(Box::new(expr), args, loc))
+    }
+
+    fn finish_get_index(&mut self, expr: Expr, loc: SourceLoc) -> Result<Expr, ParseErrorCause> {
+        // LeftBracket token already consumed.
+        let index = self.expression()?;
+        self.consume(TokenType::RightBracket, "Expect ']' after index.")?;
+
+        Ok(Expr::GetIndex(Box::new(expr), Box::new(index), loc))
     }
 
     fn primary(&mut self) -> Result<Expr, ParseErrorCause> {
@@ -613,6 +628,22 @@ impl<'a> Parser<'a> {
                 self.consume(TokenType::RightParen, "Missing close parenthesis.")?;
 
                 Expr::Grouping(Box::new(expr))
+            }
+            TokenType::LeftBracket => {
+                self.advance();
+                already_advanced = true;
+
+                let mut elements = Vec::new();
+                if ! self.check(TokenType::RightBracket) {
+                    loop {
+                        elements.push(self.expression()?);
+
+                        if ! self.match_token(TokenType::Comma) { break; }
+                    }
+                }
+                self.consume(TokenType::RightBracket, "Expect ']' after array elements.")?;
+
+                Expr::LiteralArray(elements)
             }
             TokenType::Super => {
                 match self.peek() {

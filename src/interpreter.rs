@@ -319,7 +319,42 @@ impl Interpreter {
                     _ => Err(RuntimeError::new(*loc, "Only instances have properties.")),
                 }
             }
+            Expr::GetIndex(e, index_expr, loc) => {
+                let left_val = self.evaluate(e)?;
+
+                match left_val {
+                    Value::ArrayVal(vec) => {
+                        let index_val = self.evaluate(index_expr)?;
+
+                        match index_val {
+                            Value::NumberVal(x) => {
+                                let truncated_x = x.trunc();
+                                if x == truncated_x && x >= 0.0 {
+                                    let index = truncated_x as usize;
+
+                                    match vec.borrow().get(index) {
+                                        Some(val) => Ok(val.clone()),
+                                        None => Err(RuntimeError::new(*loc, "Array index out of bounds.")),
+                                    }
+                                } else {
+                                    Err(RuntimeError::new(*loc, "Array index out of bounds."))
+                                }
+                            }
+                            _ => Err(RuntimeError::new(*loc, "Array index must be a number."))
+                        }
+                    }
+                    _ => Err(RuntimeError::new(*loc, "Only arrays can be indexed."))
+                }
+            }
             Expr::Grouping(e) => self.evaluate(e),
+            Expr::LiteralArray(elements) => {
+                let mut vals = Vec::with_capacity(elements.len());
+                for element in elements.iter() {
+                    vals.push(self.evaluate(element)?);
+                }
+
+                Ok(ArrayVal(Rc::new(RefCell::new(vals))))
+            }
             Expr::LiteralBool(b) => Ok(BoolVal(*b)),
             Expr::LiteralNil => Ok(NilVal),
             Expr::LiteralNumber(x) => Ok(NumberVal(*x)),
@@ -360,6 +395,36 @@ impl Interpreter {
                         Ok(value)
                     }
                     _ => Err(RuntimeError::new(*loc, "Only instances have fields.")),
+                }
+            }
+            Expr::SetIndex(array_expr, index, rhs, loc) => {
+                let array_val = self.evaluate(array_expr)?;
+
+                match array_val {
+                    Value::ArrayVal(vec) => {
+                        let index_val = self.evaluate(index)?;
+                        match index_val {
+                            Value::NumberVal(x) => {
+                                let truncated_x = x.trunc();
+                                if x == truncated_x && x >= 0.0 {
+                                    let index = truncated_x as usize;
+                                    let value = self.evaluate(rhs)?;
+
+                                    if index < vec.borrow().len() {
+                                        vec.borrow_mut()[index] = value.clone();
+
+                                        Ok(value)
+                                    } else {
+                                        Err(RuntimeError::new(*loc, "Array index out of bounds."))
+                                    }
+                                } else {
+                                    Err(RuntimeError::new(*loc, "Array index out of bounds."))
+                                }
+                            }
+                            _ => Err(RuntimeError::new(*loc, "Array index must be a number.")),
+                        }
+                    }
+                    _ => Err(RuntimeError::new(*loc, "Only arrays can be indexed.")),
                 }
             }
             Expr::Super(super_dist_cell, id, loc) => {
@@ -553,10 +618,14 @@ impl NativeFunction {
     pub fn arity(&self) -> usize {
         match self.id {
             NativeFunctionId::Clock => 0,
+            NativeFunctionId::ArrayCreate => 2,
+            NativeFunctionId::ArrayLength => 1,
+            NativeFunctionId::ArrayPop => 1,
+            NativeFunctionId::ArrayPush => 2,
         }
     }
 
-    pub fn call(&self, _args: Vec<Value>, loc: SourceLoc) -> Result<Value, RuntimeError> {
+    pub fn call(&self, args: Vec<Value>, loc: SourceLoc) -> Result<Value, RuntimeError> {
         match self.id {
             NativeFunctionId::Clock => {
                 const MILLIS_PER_SEC: u64 = 1000;
@@ -571,6 +640,50 @@ impl NativeFunction {
                         Ok(Value::NumberVal(combined_millis as f64 / 1000.0))
                     }
                     Err(_) => Err(RuntimeError::new(loc, "Unable to get system time since now is before the epoch")),
+                }
+            }
+            NativeFunctionId::ArrayCreate => {
+                match &args[0] {
+                    Value::NumberVal(x) => {
+                        let truncated_x = x.trunc();
+                        if *x == truncated_x && *x >= 0.0 {
+                            let length = truncated_x as usize;
+                            let mut vec = Vec::with_capacity(length);
+                            vec.resize(length, args[1].clone());
+
+                            Ok(Value::ArrayVal(Rc::new(RefCell::new(vec))))
+                        } else {
+                            Err(RuntimeError::new(loc, "Array length must be a non-negative integer."))
+                        }
+                    }
+                    _ => Err(RuntimeError::new(loc, "Array create expects number and value.")),
+                }
+            }
+            NativeFunctionId::ArrayLength => {
+                match &args[0] {
+                    Value::ArrayVal(vec) => Ok(Value::NumberVal(vec.borrow().len() as f64)),
+                    _ => Err(RuntimeError::new(loc, "Can only get length of an array.")),
+                }
+            }
+            NativeFunctionId::ArrayPop => {
+                match &args[0] {
+                    Value::ArrayVal(vec) => {
+                        match vec.borrow_mut().pop() {
+                            Some(v) => Ok(v),
+                            None => Err(RuntimeError::new(loc, "Cannot pop on an empty array.")),
+                        }
+                    }
+                    _ => Err(RuntimeError::new(loc, "Can only pop on an array.")),
+                }
+            }
+            NativeFunctionId::ArrayPush => {
+                match &args[0] {
+                    Value::ArrayVal(vec) => {
+                        vec.borrow_mut().push(args[1].clone());
+
+                        Ok(Value::NilVal)
+                    }
+                    _ => Err(RuntimeError::new(loc, "Can only push on an array.")),
                 }
             }
         }

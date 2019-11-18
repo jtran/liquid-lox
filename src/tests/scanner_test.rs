@@ -23,6 +23,10 @@ fn test_scan_single_tokens() {
     assert_eq!(s.scan_tokens(), Ok(vec![Token::new(TokenType::LeftBrace, "{", None, None, 1, 1),
                                         Token::new(TokenType::RightBrace, "}", None, None, 1, 2),
                                         Token::new(TokenType::Eof, "", None, None, 1, 3)]));
+    let mut s = Scanner::new("[]");
+    assert_eq!(s.scan_tokens(), Ok(vec![Token::new(TokenType::LeftBracket, "[", None, None, 1, 1),
+                                        Token::new(TokenType::RightBracket, "]", None, None, 1, 2),
+                                        Token::new(TokenType::Eof, "", None, None, 1, 3)]));
     // Next line.
     let mut s = Scanner::new("\n-");
     assert_eq!(s.scan_tokens(), Ok(vec![Token::new(TokenType::Minus, "-", None, None, 2, 1),

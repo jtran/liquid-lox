@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::mem;
 use std::rc::Rc;
 
@@ -89,6 +90,14 @@ fn test_interpret_literals() {
 }
 
 #[test]
+fn test_interpret_array_literals() {
+    assert_eq!(interpret("[];"), Ok(ArrayVal(Rc::new(RefCell::new(Vec::new())))));
+    assert_eq!(interpret("[1, 2];"), Ok(ArrayVal(Rc::new(RefCell::new(vec![
+                                                 NumberVal(1.0),
+                                                 NumberVal(2.0)])))));
+}
+
+#[test]
 fn test_interpret_literals_negative_zero() {
     assert_eq!(interpret("\"\" + (-0);"), Ok(StringVal(Rc::new("-0".into()))));
 }
@@ -113,6 +122,76 @@ fn test_interpret_string_plus_number_coerces() {
     assert_eq!(interpret("true + \"scone\";"), Ok(StringVal(Rc::new("truescone".into()))));
     assert_eq!(interpret("\"scone\" + nil;"), Ok(StringVal(Rc::new("sconenil".into()))));
     assert_eq!(interpret("nil + \"scone\";"), Ok(StringVal(Rc::new("nilscone".into()))));
+}
+
+#[test]
+fn test_interpret_array_get_index() {
+    assert_eq!(interpret("[1][0];"), Ok(NumberVal(1.0)));
+    assert_eq!(interpret("var a = [1, 2]; a[1];"), Ok(NumberVal(2.0)));
+    assert_eq!(interpret("var a = [1, 2]; a[2];"), Err(RuntimeError::new(SourceLoc::new(1, 18), "Array index out of bounds.")));
+    assert_eq!(interpret("var a = [1, 2]; a[-1];"), Err(RuntimeError::new(SourceLoc::new(1, 18), "Array index out of bounds.")));
+}
+
+#[test]
+fn test_interpret_array_set_index() {
+    // Return value of set index is the rhs value.
+    assert_eq!(interpret("var a = [1, 2]; a[1] = 3;"), Ok(NumberVal(3.0)));
+    // The rhs value after a set index is returned from get index.
+    assert_eq!(interpret("var a = [1, 2]; a[1] = 3; a[1];"), Ok(NumberVal(3.0)));
+    assert_eq!(interpret("var a = [1, 2]; a[2] = 3;"), Err(RuntimeError::new(SourceLoc::new(1, 22), "Array index out of bounds.")));
+    assert_eq!(interpret("var a = [1, 2]; a[-1] = 3;"), Err(RuntimeError::new(SourceLoc::new(1, 23), "Array index out of bounds.")));
+}
+
+#[test]
+fn test_interpret_array_create() {
+    assert_eq!(interpret("array_create(0, nil) == [];"), Ok(BoolVal(true)));
+    assert_eq!(interpret("var a = array_create(2, 3); a[1];"), Ok(NumberVal(3.0)));
+    assert_eq!(interpret("var a = array_create(2, 3); array_length(a);"), Ok(NumberVal(2.0)));
+    assert_eq!(interpret("array_create(nil, 1);"), Err(RuntimeError::new(SourceLoc::new(1, 13), "Array create expects number and value.")));
+    assert_eq!(interpret("array_create(0.5, 1);"), Err(RuntimeError::new(SourceLoc::new(1, 13), "Array length must be a non-negative integer.")));
+}
+
+#[test]
+fn test_interpret_array_length() {
+    assert_eq!(interpret("array_length([]);"), Ok(NumberVal(0.0)));
+    assert_eq!(interpret("array_length([10]);"), Ok(NumberVal(1.0)));
+    assert_eq!(interpret("array_length(0);"), Err(RuntimeError::new(SourceLoc::new(1, 13), "Can only get length of an array.")));
+}
+
+#[test]
+fn test_interpret_array_pop() {
+    // Popping from an array returns the last element.
+    assert_eq!(interpret("var a = [10, 20]; array_pop(a);"), Ok(NumberVal(20.0)));
+    // Popping from an array does not modify other elements.
+    assert_eq!(interpret("var a = [10, 20]; array_pop(a); a[0];"), Ok(NumberVal(10.0)));
+    // Popping from an array reduces the length.
+    assert_eq!(interpret("var a = [10, 20]; array_pop(a); array_length(a);"), Ok(NumberVal(1.0)));
+    assert_eq!(interpret("var a = []; array_pop(a);"), Err(RuntimeError::new(SourceLoc::new(1, 22), "Cannot pop on an empty array.")));
+    assert_eq!(interpret("array_pop(0);"), Err(RuntimeError::new(SourceLoc::new(1, 10), "Can only pop on an array.")));
+}
+
+#[test]
+fn test_interpret_array_push() {
+    assert_eq!(interpret("var a = []; array_push(a, 10); a[0];"), Ok(NumberVal(10.0)));
+    // Pushing to an array appends an element.
+    assert_eq!(interpret("var a = [10]; array_push(a, 20); a[1];"), Ok(NumberVal(20.0)));
+    // Pushing to an array does not modify other elements
+    assert_eq!(interpret("var a = [10]; array_push(a, 20); a[0];"), Ok(NumberVal(10.0)));
+    // Pushing to an array increases the length.
+    assert_eq!(interpret("var a = [10]; array_push(a, 20); array_length(a);"), Ok(NumberVal(2.0)));
+    assert_eq!(interpret("array_push(0, 1);"), Err(RuntimeError::new(SourceLoc::new(1, 11), "Can only push on an array.")));
+}
+
+#[test]
+fn test_interpret_array_sum() {
+    assert_eq!(interpret("
+var a = [1, 2, 3];
+var sum = 0;
+for (var i = 0; i < array_length(a); i = i + 1) {
+    sum = sum + a[i];
+}
+sum;
+    "), Ok(NumberVal(6.0)));
 }
 
 #[test]

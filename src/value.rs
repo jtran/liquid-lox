@@ -11,6 +11,7 @@ use crate::source_loc::*;
 
 #[derive(Clone, PartialEq)]
 pub enum Value {
+    ArrayVal(Rc<RefCell<Vec<Value>>>),
     BoolVal(bool),
     ClassVal(ClassRef),
     ClosureVal(ClosureRef),
@@ -26,6 +27,7 @@ use self::Value::*;
 impl Value {
     pub fn is_truthy(&self) -> bool {
         match self {
+            ArrayVal(_) => true,
             BoolVal(b) => *b,
             ClassVal(_) => true,
             ClosureVal(_) => true,
@@ -38,6 +40,7 @@ impl Value {
 
     pub fn is_equal(&self, other: &Value) -> bool {
         match (self, other) {
+            (ArrayVal(a1), ArrayVal(a2)) => a1 == a2,
             (BoolVal(b1), BoolVal(b2)) => b1 == b2,
             (ClassVal(class1), ClassVal(class2)) => class1 == class2,
             // It matters that they are the same environments because they can
@@ -54,6 +57,10 @@ impl Value {
 
     pub fn to_runtime_string(&self) -> String {
         match self {
+            ArrayVal(vec) => format!("[{}]",
+                                     vec.borrow().iter().map(|v| v.to_runtime_string())
+                                        .collect::<Vec<String>>()
+                                        .join(", ")),
             BoolVal(true) => "true".into(),
             BoolVal(false) => "false".into(),
             ClassVal(class_ref) => class_ref.name().to_string(),
@@ -337,6 +344,11 @@ impl fmt::Display for Value {
         // This is like inspect and tries to output the code you would need to
         // write to get the value.  This is used in the REPL.
         match self {
+            // TODO: This can be more efficient.
+            ArrayVal(vec) => write!(f, "[{}]",
+                                    vec.borrow().iter().map(|v| v.to_string())
+                                       .collect::<Vec<String>>()
+                                       .join(", ")),
             BoolVal(false) => write!(f, "false"),
             BoolVal(true) => write!(f, "true"),
             ClassVal(class_ref) => {
@@ -373,6 +385,7 @@ impl fmt::Display for Value {
 impl fmt::Debug for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            ArrayVal(v) => write!(f, "ArrayVal({:?})", v),
             BoolVal(b) => write!(f, "BoolVal({:?})", b),
             ClassVal(class_def) => write!(f, "ClassVal({:?})", class_def),
             ClosureVal(closure) => write!(f, "ClosureVal({:?})", closure),
@@ -450,10 +463,19 @@ impl From<ExecutionInterrupt> for RuntimeError {
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum NativeFunctionId {
     Clock,
+    ArrayCreate,
+    ArrayLength,
+    ArrayPop,
+    ArrayPush,
 }
 
 pub fn all_native_ids() -> Vec<NativeFunctionId> {
-    vec![NativeFunctionId::Clock]
+    vec![NativeFunctionId::Clock,
+         NativeFunctionId::ArrayCreate,
+         NativeFunctionId::ArrayLength,
+         NativeFunctionId::ArrayPop,
+         NativeFunctionId::ArrayPush,
+    ]
 }
 
 impl fmt::Display for NativeFunctionId {
@@ -461,6 +483,10 @@ impl fmt::Display for NativeFunctionId {
         use self::NativeFunctionId::*;
         match self {
             Clock => write!(f, "clock"),
+            ArrayCreate => write!(f, "array_create"),
+            ArrayLength => write!(f, "array_length"),
+            ArrayPop => write!(f, "array_pop"),
+            ArrayPush => write!(f, "array_push"),
         }
     }
 }

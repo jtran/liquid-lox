@@ -42,6 +42,14 @@ Optional challenges and features implemented:
 Custom features not mentioned in the book:
 
 - Unicode variable names
+- Arrays
+  - literals `[1, 2, 3]`
+  - get `array[index]`
+  - set `array[index] = exp`
+  - `array_create(length, fill_value)`
+  - `array_length(array)`
+  - `array_push(array, item)`
+  - `array_pop(array)`
 
 Features I will probably never implement:
 

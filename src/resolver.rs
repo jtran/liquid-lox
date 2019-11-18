@@ -219,7 +219,20 @@ impl Resolver {
                 Ok(())
             }
             Expr::Get(expr, _, _) => self.resolve_expression(expr),
+            Expr::GetIndex(expr, index, _) => {
+                self.resolve_expression(expr)?;
+                self.resolve_expression(index)?;
+
+                Ok(())
+            }
             Expr::Grouping(expr) => self.resolve_expression(expr),
+            Expr::LiteralArray(elements) => {
+                for element in elements.iter_mut() {
+                    self.resolve_expression(element)?;
+                }
+
+                Ok(())
+            }
             Expr::LiteralBool(_) => Ok(()),
             Expr::LiteralNil => Ok(()),
             Expr::LiteralNumber(_) => Ok(()),
@@ -236,6 +249,13 @@ impl Resolver {
                 // order.
                 self.resolve_expression(object_expr)?;
                 self.resolve_expression(value_expr)?;
+
+                Ok(())
+            }
+            Expr::SetIndex(array, index, rhs, _) => {
+                self.resolve_expression(array)?;
+                self.resolve_expression(index)?;
+                self.resolve_expression(rhs)?;
 
                 Ok(())
             }

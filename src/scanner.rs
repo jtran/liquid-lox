@@ -96,6 +96,8 @@ impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
                     ")" => self.add_token(RightParen),
                     "{" => self.add_token(LeftBrace),
                     "}" => self.add_token(RightBrace),
+                    "[" => self.add_token(LeftBracket),
+                    "]" => self.add_token(RightBracket),
                     "," => self.add_token(Comma),
                     "." => self.add_token(Dot),
                     "-" => self.add_token(Minus),
