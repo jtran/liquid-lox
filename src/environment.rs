@@ -120,6 +120,13 @@ impl Environment {
         }
     }
 
+    pub fn new_for_call(enclosing: Rc<RefCell<Environment>>) -> Environment {
+        Environment {
+            values: Vec::new(),
+            enclosing: Some(enclosing),
+        }
+    }
+
     pub fn next_frame_index(&self) -> FrameIndex {
         let len = self.values.len();
         // Be carefult to compare with a larger width.  But the resolver should

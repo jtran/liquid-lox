@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::fmt;
 use std::ops::Deref;
 use std::rc::Rc;
+use std::slice::Iter;
 
 use crate::ast::*;
 use crate::environment::*;
@@ -278,7 +279,7 @@ impl Instance {
 pub struct ClosureRef(Rc<Closure>);
 
 impl ClosureRef {
-    pub fn new(name: Option<String>,
+    pub fn new(name: Option<Rc<String>>,
                fun_def: Rc<FunctionDefinition>,
                env: Rc<RefCell<Environment>>) -> ClosureRef {
         let closure = Closure::new(name, fun_def, env);
@@ -290,7 +291,7 @@ impl ClosureRef {
         ClosureRef(Rc::new(closure))
     }
 
-    pub fn name(&self) -> Option<String> {
+    pub fn name(&self) -> Option<&str> {
         self.0.name()
     }
 
@@ -325,13 +326,13 @@ impl PartialEq for ClosureRef {
 
 #[derive(Clone, PartialEq)]
 pub struct Closure {
-    name: Option<String>,
+    name: Option<Rc<String>>,
     fun_def: Rc<FunctionDefinition>,
     env: Rc<RefCell<Environment>>,
 }
 
 impl Closure {
-    pub fn new(name: Option<String>,
+    pub fn new(name: Option<Rc<String>>,
                fun_def: Rc<FunctionDefinition>,
                env: Rc<RefCell<Environment>>) -> Closure {
         Closure {
@@ -341,8 +342,8 @@ impl Closure {
         }
     }
 
-    pub fn name(&self) -> Option<String> {
-        self.name.clone()
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_ref().map(|string| string.as_str())
     }
 
     pub fn arity(&self) -> usize {
@@ -359,7 +360,7 @@ impl Closure {
         let this_frame_index = new_env.next_frame_index();
         new_env.define_at("this", this_frame_index, this_value);
 
-        Closure::new(self.name.clone(),
+        Closure::new(self.name.as_ref().map(Rc::clone),
                      Rc::clone(&self.fun_def),
                      Rc::new(RefCell::new(new_env)))
     }
@@ -455,24 +456,75 @@ impl From<RuntimeError> for ExecutionInterrupt {
     }
 }
 
+// A single line in a backtrace.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct RuntimeError {
+pub struct BacktraceItem {
+    pub function_name: String,
     pub source_loc: SourceLoc,
-    pub message: String,
 }
 
-impl RuntimeError {
-    pub fn new(source_loc: SourceLoc, message: &str) -> RuntimeError {
-        RuntimeError {
-            source_loc,
-            message: message.to_string(),
+impl BacktraceItem {
+    pub fn new(function_name: String, source_loc: SourceLoc) -> BacktraceItem {
+        BacktraceItem {
+            function_name,
+            source_loc: source_loc,
         }
     }
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Backtrace(Vec<BacktraceItem>);
+
+impl Backtrace {
+    pub fn new(backtrace_items: Vec<BacktraceItem>) -> Backtrace {
+        Backtrace(backtrace_items)
+    }
+
+    pub fn iter(&self) -> Iter<BacktraceItem> {
+        self.0.iter()
+    }
+}
+
+// Box values to reduce size in memory.  Since it's an error, speed isn't as
+// important as optimizing for the success case.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RuntimeError {
+    pub source_loc: SourceLoc,
+    pub message: Box<String>,
+    pub backtrace: Box<Backtrace>,
+}
+
+impl RuntimeError {
+    pub fn new(source_loc: SourceLoc,
+               message: &str,
+               backtrace: Backtrace) -> RuntimeError {
+        RuntimeError {
+            source_loc,
+            message: Box::new(message.to_string()),
+            backtrace: Box::new(backtrace),
+        }
+    }
+
+    pub fn from_parse_error(source_loc: SourceLoc,
+                            message: &str) -> RuntimeError {
+        let items = vec![BacktraceItem::new("(parser)".to_string(), SourceLoc::default())];
+        let backtrace = Backtrace::new(items);
+        RuntimeError {
+            source_loc,
+            message: Box::new(format!("parse error: {}", message)),
+            backtrace: Box::new(backtrace),
+        }
+    }
+
+    pub fn from_native_error(err: NativeRuntimeError, backtrace: Backtrace) -> RuntimeError {
+        RuntimeError::new(err.source_loc, &err.message, backtrace)
+    }
+
+}
+
 impl From<ParseError> for RuntimeError {
     fn from(err: ParseError) -> RuntimeError {
-        RuntimeError::new(err.source_loc(), &format!("parse error: {}", &err.message()))
+        RuntimeError::from_parse_error(err.source_loc(), &err.message())
     }
 }
 
@@ -485,6 +537,21 @@ impl From<ExecutionInterrupt> for RuntimeError {
             ExecutionInterrupt::Continue(_) => panic!("Unexpected continue execution interrupt: {:?}", &interrupt),
             ExecutionInterrupt::Error(error) => error,
             ExecutionInterrupt::Return(_) => panic!("Unexpected return execution interrupt: {:?}", &interrupt),
+        }
+    }
+}
+
+pub struct NativeRuntimeError {
+    pub source_loc: SourceLoc,
+    pub message: String,
+}
+
+impl NativeRuntimeError {
+    pub fn new(source_loc: SourceLoc,
+               message: &str) -> NativeRuntimeError {
+        NativeRuntimeError {
+            source_loc,
+            message: message.to_string(),
         }
     }
 }

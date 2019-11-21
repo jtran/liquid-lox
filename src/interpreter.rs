@@ -10,8 +10,16 @@ use crate::field_table::*;
 use crate::source_loc::*;
 use crate::value::*;
 
+// This is currently used only for backtrace info when there's a runtime error.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CallFrame {
+    closure_ref: ClosureRef,
+    source_loc: SourceLoc,
+}
+
 pub struct Interpreter {
     env: Rc<RefCell<Environment>>,
+    frames: Vec<CallFrame>,
 }
 
 impl Interpreter {
@@ -29,6 +37,7 @@ impl Interpreter {
 
         Interpreter {
             env: Rc::new(RefCell::new(globals)),
+            frames: Vec::with_capacity(64),
         }
     }
 
@@ -89,7 +98,8 @@ impl Interpreter {
                             }
                             // TODO: Store and use the superclass source location.
                             _ => return Err(ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
-                                            "Superclass must be a class."))),
+                                            "Superclass must be a class.",
+                                            self.backtrace()))),
                         }
                     }
                 };
@@ -97,7 +107,7 @@ impl Interpreter {
                 let mut methods = FieldTable::new();
                 let mut class_methods = FieldTable::new();
                 for method in class_def.methods.iter() {
-                    let closure = ClosureRef::new(Some(method.name.clone()), Rc::new(method.fun_def.clone()), Rc::clone(&self.env));
+                    let closure = ClosureRef::new(Some(Rc::new(method.name.clone())), Rc::new(method.fun_def.clone()), Rc::clone(&self.env));
                     let container = match method.fun_def.fun_type {
                         FunctionType::ClassMethod => &mut class_methods,
                         FunctionType::Method
@@ -125,12 +135,13 @@ impl Interpreter {
                 env.assign_at(&class_def.name, var_loc, Value::ClassVal(class_ref))
                     .map(|_| Value::NilVal )
                     .map_err(|_| ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
-                                    &format!("Undefined variable for class; this is probably an interpreter bug: {}", class_def.name))))
+                                    &format!("Undefined variable for class; this is probably an interpreter bug: {}", class_def.name),
+                                    self.backtrace())))
             }
             Stmt::Continue(loc) => Err(ExecutionInterrupt::Continue(*loc)),
             Stmt::Expression(expr) => self.evaluate(expr).map_err(|err| err.into()),
             Stmt::Fun(fun_decl) => {
-                let closure = ClosureRef::new(Some(fun_decl.name.clone()), Rc::new(fun_decl.fun_def.clone()), Rc::clone(&self.env));
+                let closure = ClosureRef::new(Some(Rc::new(fun_decl.name.clone())), Rc::new(fun_decl.fun_def.clone()), Rc::clone(&self.env));
                 let mut env = self.env.deref().borrow_mut();
                 let frame_index = env.next_frame_index();
                 env.define_at(&fun_decl.name, frame_index, Value::ClosureVal(closure));
@@ -210,7 +221,7 @@ impl Interpreter {
                 let mut env = self.env.deref().borrow_mut();
                 env.assign_at(&id, dist_cell.get(), value.clone())
                     .map_err(|_| {
-                        RuntimeError::new(*loc, &format!("Undefined variable '{}'.", &id))
+                        RuntimeError::new(*loc, &format!("Undefined variable '{}'.", &id), self.backtrace())
                     })?;
 
                 Ok(value)
@@ -233,33 +244,33 @@ impl Interpreter {
                             (_, StringVal(s2)) => {
                                 Ok(StringVal(Rc::new(format!("{}{}", left_val.to_runtime_string(), s2.deref()))))
                             }
-                            (NumberVal(_), _) => Err(RuntimeError::new(*loc, "Operands must be two numbers or two strings.")),
-                            _ => Err(RuntimeError::new(*loc, "Operands must be two numbers or two strings.")),
+                            (NumberVal(_), _) => Err(RuntimeError::new(*loc, "Operands must be two numbers or two strings.", self.backtrace())),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be two numbers or two strings.", self.backtrace())),
                         }
                     },
                     BinaryOperator::Minus => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(NumberVal(x1 - x2)),
-                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
                     },
                     BinaryOperator::Multiply => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(NumberVal(x1 * x2)),
-                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
                     },
                     BinaryOperator::Divide => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => {
                                 if x2 == 0.0 {
-                                    Err(RuntimeError::new(*loc, "attempted to divide by zero"))
+                                    Err(RuntimeError::new(*loc, "attempted to divide by zero", self.backtrace()))
                                 }
                                 else {
                                     Ok(NumberVal(x1 / x2))
                                 }
                             }
-                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
                     },
                     // Comparison operators.
@@ -268,25 +279,25 @@ impl Interpreter {
                     BinaryOperator::Less => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 < x2)),
-                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
                     },
                     BinaryOperator::LessEqual => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 <= x2)),
-                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
                     },
                     BinaryOperator::Greater => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 > x2)),
-                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
                     },
                     BinaryOperator::GreaterEqual => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 >= x2)),
-                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.")),
+                            _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
                     },
                 }
@@ -312,16 +323,16 @@ impl Interpreter {
                     Value::ClassVal(class_ref) => {
                         match class_ref.get(property_name) {
                             Some(v) => Ok(v),
-                            None => Err(RuntimeError::new(*loc, &format!("Undefined property '{}'.", property_name))),
+                            None => Err(RuntimeError::new(*loc, &format!("Undefined property '{}'.", property_name), self.backtrace())),
                         }
                     }
                     Value::InstanceVal(instance_ref) => {
                         match instance_ref.get(property_name) {
                             Some(v) => Ok(v),
-                            None => Err(RuntimeError::new(*loc, &format!("Undefined property '{}'.", property_name))),
+                            None => Err(RuntimeError::new(*loc, &format!("Undefined property '{}'.", property_name), self.backtrace())),
                         }
                     }
-                    _ => Err(RuntimeError::new(*loc, "Only instances have properties.")),
+                    _ => Err(RuntimeError::new(*loc, "Only instances have properties.", self.backtrace())),
                 }
             }
             Expr::GetIndex(e, index_expr, loc) => {
@@ -339,16 +350,16 @@ impl Interpreter {
 
                                     match vec.borrow().get(index) {
                                         Some(val) => Ok(val.clone()),
-                                        None => Err(RuntimeError::new(*loc, "Array index out of bounds.")),
+                                        None => Err(RuntimeError::new(*loc, "Array index out of bounds.", self.backtrace())),
                                     }
                                 } else {
-                                    Err(RuntimeError::new(*loc, "Array index out of bounds."))
+                                    Err(RuntimeError::new(*loc, "Array index out of bounds.", self.backtrace()))
                                 }
                             }
-                            _ => Err(RuntimeError::new(*loc, "Array index must be a number."))
+                            _ => Err(RuntimeError::new(*loc, "Array index must be a number.", self.backtrace()))
                         }
                     }
-                    _ => Err(RuntimeError::new(*loc, "Only arrays can be indexed."))
+                    _ => Err(RuntimeError::new(*loc, "Only arrays can be indexed.", self.backtrace()))
                 }
             }
             Expr::Grouping(e) => self.evaluate(e),
@@ -399,7 +410,7 @@ impl Interpreter {
 
                         Ok(value)
                     }
-                    _ => Err(RuntimeError::new(*loc, "Only instances have fields.")),
+                    _ => Err(RuntimeError::new(*loc, "Only instances have fields.", self.backtrace())),
                 }
             }
             Expr::SetIndex(array_expr, index, rhs, loc) => {
@@ -420,16 +431,16 @@ impl Interpreter {
 
                                         Ok(value)
                                     } else {
-                                        Err(RuntimeError::new(*loc, "Array index out of bounds."))
+                                        Err(RuntimeError::new(*loc, "Array index out of bounds.", self.backtrace()))
                                     }
                                 } else {
-                                    Err(RuntimeError::new(*loc, "Array index out of bounds."))
+                                    Err(RuntimeError::new(*loc, "Array index out of bounds.", self.backtrace()))
                                 }
                             }
-                            _ => Err(RuntimeError::new(*loc, "Array index must be a number.")),
+                            _ => Err(RuntimeError::new(*loc, "Array index must be a number.", self.backtrace())),
                         }
                     }
-                    _ => Err(RuntimeError::new(*loc, "Only arrays can be indexed.")),
+                    _ => Err(RuntimeError::new(*loc, "Only arrays can be indexed.", self.backtrace())),
                 }
             }
             Expr::Super(super_dist_cell, id, loc) => {
@@ -438,9 +449,9 @@ impl Interpreter {
                 let super_var_loc = super_dist_cell.get();
                 let superclass = match env.get_at("super", super_var_loc) {
                     // Interpreter bug?
-                    None => return Err(RuntimeError::new(*loc, "Undefined variable: super")),
+                    None => return Err(RuntimeError::new(*loc, "Undefined variable: super", self.backtrace())),
                     Some(Value::ClassVal(class)) => class,
-                    Some(_) => return Err(RuntimeError::new(*loc, "super didn't evaluate to a class")),
+                    Some(_) => return Err(RuntimeError::new(*loc, "super didn't evaluate to a class", self.backtrace())),
                 };
 
                 // Instance is always defined one frame before super.
@@ -453,17 +464,17 @@ impl Interpreter {
 
                 match env.get_at(id, this_var_loc) {
                     // Interpreter bug?
-                    None => Err(RuntimeError::new(*loc, "Undefined variable \"this\" when evaluating super expression")),
+                    None => Err(RuntimeError::new(*loc, "Undefined variable \"this\" when evaluating super expression", self.backtrace())),
                     Some(Value::ClassVal(class_ref)) => {
                         superclass.bound_class_method(id, class_ref)
-                            .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property '{}'.", id)))
+                            .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property '{}'.", id), self.backtrace()))
                     }
                     Some(Value::InstanceVal(instance_ref)) => {
                         superclass.bound_method(id, instance_ref)
-                            .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property '{}'.", id)))
+                            .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property '{}'.", id), self.backtrace()))
                     }
                     // Interpreter bug?
-                    Some(_) => Err(RuntimeError::new(*loc, "\"this\" in super expression didn't evaluate to an instance or class")),
+                    Some(_) => Err(RuntimeError::new(*loc, "\"this\" in super expression didn't evaluate to an instance or class", self.backtrace())),
                 }
             }
             Expr::Variable(id, dist_cell, loc) => {
@@ -472,7 +483,7 @@ impl Interpreter {
                 env.get_at(id, dist_cell.get())
                     // In the case that the variable is not in the environment,
                     // generate a runtime error.
-                    .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined variable '{}'.", id)))
+                    .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined variable '{}'.", id), self.backtrace()))
             }
             Expr::Unary(op, e, loc) => {
                 let v = self.evaluate(e)?;
@@ -481,7 +492,7 @@ impl Interpreter {
                     UnaryOperator::Minus => {
                         match v {
                             NumberVal(x) => Ok(NumberVal(-x)),
-                            _ => Err(RuntimeError::new(*loc, "Operand must be a number.")),
+                            _ => Err(RuntimeError::new(*loc, "Operand must be a number.", self.backtrace())),
                         }
                     },
                     UnaryOperator::Not => Ok(BoolVal(!v.is_truthy())),
@@ -522,6 +533,7 @@ impl Interpreter {
                 self.check_call_arity(native_function.arity(), args.len(), &loc)?;
 
                 native_function.call(args, loc)
+                    .map_err(|e| RuntimeError::from_native_error(e, self.backtrace()))
             }
             Value::ClassVal(class_ref) => {
                 let instance_val = Value::InstanceVal(InstanceRef::new(class_ref.clone()));
@@ -539,7 +551,7 @@ impl Interpreter {
                         let bound_method = closure.bind(instance_val.clone());
                         self.eval_call(Value::ClosureVal(bound_method), args, loc)?;
                     }
-                    Some(v) => return Err(RuntimeError::new(loc, &format!("The \"init\" property of a class should be a function, but it isn't: {}", v))),
+                    Some(v) => return Err(RuntimeError::new(loc, &format!("The \"init\" property of a class should be a function, but it isn't: {}", v), self.backtrace())),
                 };
 
                 Ok(instance_val)
@@ -547,8 +559,14 @@ impl Interpreter {
             Value::ClosureVal(closure_ref) => {
                 let fun_def = closure_ref.function_definition();
                 self.check_call_arity(fun_def.parameters.len(), args.len(), &loc)?;
+                // Create call frame.
+                let frame = CallFrame {
+                    closure_ref: closure_ref.clone(),
+                    source_loc: loc,
+                };
+                self.frames.push(frame);
                 // Create a new environment, enclosed by closure's environment.
-                let mut new_env = Environment::new_with_parent(Rc::clone(closure_ref.env()));
+                let mut new_env = Environment::new_for_call(Rc::clone(closure_ref.env()));
                 // Bind parameters to argument values.
                 let mut frame_index = new_env.next_frame_index();
                 for (parameter, arg) in fun_def.parameters.iter().zip(args) {
@@ -559,6 +577,9 @@ impl Interpreter {
                 // Execute function body in new environment.
                 let new_env_sptr = Rc::new(RefCell::new(new_env));
                 let return_value_result = self.exec_in_env(fun_def.body.as_slice(), new_env_sptr);
+
+                // Pop the call frame.
+                self.frames.pop();
 
                 match fun_def.fun_type {
                     // For initializers, always return the instance.
@@ -580,7 +601,7 @@ impl Interpreter {
                         self.unwrap_return_value(return_value_result),
                 }
             }
-            _ => Err(RuntimeError::new(loc, "Can only call functions and classes.")),
+            _ => Err(RuntimeError::new(loc, "Can only call functions and classes.", self.backtrace())),
         }
     }
 
@@ -588,7 +609,7 @@ impl Interpreter {
         -> Result<(), RuntimeError>
     {
         if num_args != arity {
-            return Err(RuntimeError::new(*loc, &format!("Expected {} arguments but got {}.", arity, num_args)));
+            return Err(RuntimeError::new(*loc, &format!("Expected {} arguments but got {}.", arity, num_args), self.backtrace()));
         }
 
         Ok(())
@@ -607,7 +628,21 @@ impl Interpreter {
     }
 
     fn new_env_from_current(&self) -> Environment {
+        // TODO: We should be able to optimize away creating an entire
+        // environment since this isn't for a function call.
         Environment::new_with_parent(Rc::clone(&self.env))
+    }
+
+    fn backtrace(&self) -> Backtrace {
+        let mut items = Vec::with_capacity(self.frames.len());
+        for frame in self.frames.iter().rev() {
+            let fun_name = frame.closure_ref.name().map(str::to_string)
+                                .unwrap_or_else(|| "(anonymous)".to_string());
+            items.push(BacktraceItem::new(fun_name,
+                                          frame.source_loc))
+        }
+
+        Backtrace::new(items)
     }
 }
 
@@ -630,7 +665,7 @@ impl NativeFunction {
         }
     }
 
-    pub fn call(&self, args: Vec<Value>, loc: SourceLoc) -> Result<Value, RuntimeError> {
+    pub fn call(&self, args: Vec<Value>, loc: SourceLoc) -> Result<Value, NativeRuntimeError> {
         match self.id {
             NativeFunctionId::Clock => {
                 const MILLIS_PER_SEC: u64 = 1000;
@@ -644,7 +679,7 @@ impl NativeFunction {
 
                         Ok(Value::NumberVal(combined_millis as f64 / 1000.0))
                     }
-                    Err(_) => Err(RuntimeError::new(loc, "Unable to get system time since now is before the epoch")),
+                    Err(_) => Err(NativeRuntimeError::new(loc, "Unable to get system time since now is before the epoch")),
                 }
             }
             NativeFunctionId::ArrayCreate => {
@@ -658,16 +693,16 @@ impl NativeFunction {
 
                             Ok(Value::ArrayVal(Rc::new(RefCell::new(vec))))
                         } else {
-                            Err(RuntimeError::new(loc, "Array length must be a non-negative integer."))
+                            Err(NativeRuntimeError::new(loc, "Array length must be a non-negative integer."))
                         }
                     }
-                    _ => Err(RuntimeError::new(loc, "Array create expects number and value.")),
+                    _ => Err(NativeRuntimeError::new(loc, "Array create expects number and value.")),
                 }
             }
             NativeFunctionId::ArrayLength => {
                 match &args[0] {
                     Value::ArrayVal(vec) => Ok(Value::NumberVal(vec.borrow().len() as f64)),
-                    _ => Err(RuntimeError::new(loc, "Can only get length of an array.")),
+                    _ => Err(NativeRuntimeError::new(loc, "Can only get length of an array.")),
                 }
             }
             NativeFunctionId::ArrayPop => {
@@ -675,10 +710,10 @@ impl NativeFunction {
                     Value::ArrayVal(vec) => {
                         match vec.borrow_mut().pop() {
                             Some(v) => Ok(v),
-                            None => Err(RuntimeError::new(loc, "Cannot pop on an empty array.")),
+                            None => Err(NativeRuntimeError::new(loc, "Cannot pop on an empty array.")),
                         }
                     }
-                    _ => Err(RuntimeError::new(loc, "Can only pop on an array.")),
+                    _ => Err(NativeRuntimeError::new(loc, "Can only pop on an array.")),
                 }
             }
             NativeFunctionId::ArrayPush => {
@@ -688,7 +723,7 @@ impl NativeFunction {
 
                         Ok(Value::NilVal)
                     }
-                    _ => Err(RuntimeError::new(loc, "Can only push on an array.")),
+                    _ => Err(NativeRuntimeError::new(loc, "Can only push on an array.")),
                 }
             }
         }

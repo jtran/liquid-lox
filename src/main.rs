@@ -145,7 +145,13 @@ fn print_parse_error(error: &ParseErrorCause) {
 
 fn print_runtime_error(error: &RuntimeError) {
     eprintln!("{}", error.message);
-    eprintln!("[line {}:{}]", error.source_loc.line, error.source_loc.column);
+    // Print the backtrace.
+    let mut loc = error.source_loc;
+    for item in error.backtrace.iter() {
+        eprintln!("[line {}:{}] in {}()", loc.line, loc.column, item.function_name);
+        loc = item.source_loc;
+    }
+    eprintln!("[line {}:{}] in script", loc.line, loc.column);
 }
 
 impl From<ParseError> for RunError {
