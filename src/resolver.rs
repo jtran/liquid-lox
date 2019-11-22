@@ -388,9 +388,6 @@ impl Resolver {
                         function_type: FunctionType) -> Result<(), ParseErrorCause> {
         // Track what kind of function we're in.
         let enclosing_func_type = self.function_type;
-        // We can't just use the new one because it may be a plain function
-        // nested inside of a method.  In that case, we want to keep the state
-        // that we are in a method.
         self.function_type = function_type;
 
         self.begin_scope();
