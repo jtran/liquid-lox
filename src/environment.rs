@@ -43,7 +43,6 @@ impl FrameIndex {
 pub struct VarLoc {
     distance: u16,
     index: u8,
-    unresolved: bool,
 }
 
 impl VarLoc {
@@ -51,7 +50,6 @@ impl VarLoc {
         VarLoc {
             distance: 0,
             index: 0,
-            unresolved: true,
         }
     }
 
@@ -59,7 +57,6 @@ impl VarLoc {
         VarLoc {
             distance,
             index,
-            unresolved: false,
         }
     }
 
@@ -67,7 +64,6 @@ impl VarLoc {
         VarLoc {
             distance,
             index,
-            unresolved: false,
         }
     }
 
@@ -158,10 +154,6 @@ impl Environment {
     }
 
     pub fn get_at(&self, name: &str, var_loc: VarLoc) -> Option<Value> {
-        if var_loc.unresolved {
-            panic!("Environment::get_at(): var_loc should not be unresolved");
-        }
-
         match self.get_at_distance(var_loc.index, var_loc.distance) {
             Err(LookupFailure::DistanceTooFar) => panic!("tried to look up a variable at a distance greater than exists: {} index={} distance={}", name, var_loc.index, var_loc.distance),
             Err(LookupFailure::NotDefined) => None,
@@ -194,10 +186,6 @@ impl Environment {
     pub fn assign_at(&mut self, name: &str, var_loc: VarLoc, new_value: Value)
         -> Result<(), ()>
     {
-        if var_loc.unresolved {
-            panic!("Environment::assign_at(): var_loc should not be unresolved");
-        }
-
         match self.assign_at_distance(var_loc.index, var_loc.distance, new_value) {
             Err(LookupFailure::DistanceTooFar) => panic!("tried to assign to a variable at a distance greater than exists: {} index={} distance={}", name, var_loc.index, var_loc.distance),
             Err(LookupFailure::NotDefined) => Err(()),
