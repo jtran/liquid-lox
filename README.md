@@ -1,34 +1,26 @@
+## Liquid Lox
+
 This is an interpreter for the Lox language from
 [Crafting Interpreters](https://www.craftinginterpreters.com/).  Lox is a
 dynamic, object-oriented language loosely based on JavaScript.  See the
 [language overview](https://www.craftinginterpreters.com/the-lox-language.html)
 for features of the language.
 
-The priorities for this project are:
+A few notable highlights of this implementation:
 
-1. Fun!
-2. Learning
+- Passing the reference implementation's test suite
+- Arrays
+- Unicode variable names
+- `break` and `continue`
+- Free software license
 
-#### Reference Tests
+See below for the gory details.
 
-To ensure correctness, I run this against the [official test suite](https://github.com/munificent/craftinginterpreters/tree/master/test).
-
-Current status:
-
-- 224 tests passed
-- 15 tests failed
-- 8 failures are due to optional features and are false positives
-- 7 failures are minor differences in parse error messages
-
-Like the reference implementation, we skip limit tests that don't apply.
-
-#### Differences
-
-Because of my priorities, I may implement some things and not others.
+### Differences from the Reference Implementation
 
 Optional challenges and features implemented:
 
-- Pass the reference implementation's test suite (getting there, at least)
+- Pass the reference implementation's test suite (see status for exact counts)
 - Column number of source, in addition to line number, is displayed in error
   messages
 - Plus operator coerces to string when one value is a string
@@ -52,9 +44,30 @@ Custom features not mentioned in the book:
   - `array_push(array, item)`
   - `array_pop(array)`
 
-Features I will probably never implement:
+Features that will probably never be implemented:
 
 - Better runtime performance by using a bytecode virtual machine
+
+### Reference Tests
+
+To ensure correctness, the
+[official test suite](https://github.com/munificent/craftinginterpreters/tree/master/test)
+is run.
+
+Current status:
+
+- 224 tests passed
+- 15 tests failed
+- 8 failures are due to optional features and are false positives
+- 7 failures are minor differences in parse error messages
+
+Like the reference implementation, we skip limit tests that don't apply.
+
+### Known Issues
+
+- Because the interpreter uses reference counting and doesn't (yet) implement a
+  garbage collector, many input programs create reference cycles and leak
+  memory.
 
 ## Building
 
@@ -84,6 +97,6 @@ lox
 cargo test
 ```
 
-Note: This runs the internal test suite.  I do not include the
+Note: This runs the internal test suite.  The
 [reference tests](https://github.com/munificent/craftinginterpreters/tree/master/test)
-in this repo.
+aren't included in this repo.
