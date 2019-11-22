@@ -9,19 +9,10 @@ use crate::error::*;
 use crate::source_loc::*;
 use crate::value::*;
 
-pub fn resolve(statements: &mut Vec<Stmt>) -> Result<(), ParseError> {
+pub fn resolve(statements: Vec<Stmt>) -> Result<ResolvedCode, ParseError> {
     let mut resolver = Resolver::new();
-    resolver.resolve(statements)?;
 
-    Ok(())
-}
-
-#[allow(dead_code)]
-pub fn resolve_expression(expression: &mut Expr) -> Result<(), ParseError> {
-    let mut resolver = Resolver::new();
-    resolver.resolve_expression(expression)?;
-
-    Ok(())
+    resolver.resolve(statements)
 }
 
 // Resolves uses of identifiers to their scope.  We decide statically which var
@@ -84,7 +75,7 @@ impl Resolver {
         resolver
     }
 
-    pub fn resolve(&mut self, statements: &mut Vec<Stmt>) -> Result<(), ParseError> {
+    pub fn resolve(&mut self, mut statements: Vec<Stmt>) -> Result<ResolvedCode, ParseError> {
         let mut errors = Vec::new();
         for statement in statements.iter_mut() {
             let result = self.resolve_statement(statement);
@@ -94,13 +85,13 @@ impl Resolver {
         }
 
         if errors.is_empty() {
-            Ok(())
+            Ok(ResolvedCode::new(statements))
         } else {
             Err(ParseError::new(errors))
         }
     }
 
-    pub fn resolve_statement(&mut self, statement: &mut Stmt) -> Result<(), ParseErrorCause> {
+    fn resolve_statement(&mut self, statement: &mut Stmt) -> Result<(), ParseErrorCause> {
         match statement {
             Stmt::Block(statements) => {
                 self.begin_scope();
@@ -195,7 +186,7 @@ impl Resolver {
         }
     }
 
-    pub fn resolve_expression(&mut self, expression: &mut Expr) -> Result<(), ParseErrorCause> {
+    fn resolve_expression(&mut self, expression: &mut Expr) -> Result<(), ParseErrorCause> {
         match expression {
             Expr::Assign(identifier, dist_cell, expr, loc) => {
                 self.resolve_expression(expr)?;

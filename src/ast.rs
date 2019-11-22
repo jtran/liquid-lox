@@ -3,6 +3,10 @@ use std::cell::Cell;
 use crate::environment::{FrameIndex, VarLoc};
 use crate::source_loc::*;
 
+pub struct ResolvedCode {
+    pub statements: Vec<Stmt>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {
     Block(Vec<Stmt>),
@@ -102,6 +106,14 @@ pub enum BinaryOperator {
 pub enum LogicalOperator {
     And,
     Or,
+}
+
+impl ResolvedCode {
+    pub fn new(statements: Vec<Stmt>) -> ResolvedCode {
+        ResolvedCode {
+            statements,
+        }
+    }
 }
 
 impl AsRef<Stmt> for Stmt {

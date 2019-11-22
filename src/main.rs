@@ -101,14 +101,14 @@ fn run(interpreter: &mut Interpreter, source: String, for_repl: bool)
     -> Result<Value, RunError>
 {
     // If there's a parse error, it's converted to a run error here.
-    let mut ast = if for_repl {
+    let ast = if for_repl {
         parser::parse_repl_line(&source)
     }
     else {
         parser::parse(&source)
     }?;
-    resolver::resolve(&mut ast).map_err(|e| ParseError::from(e))?;
-    let result = interpreter.interpret(ast);
+    let code = resolver::resolve(ast).map_err(|e| ParseError::from(e))?;
+    let result = interpreter.interpret(&code);
 
     result.map_err(|err| err.into())
 }

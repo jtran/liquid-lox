@@ -42,9 +42,9 @@ impl Interpreter {
     }
 
     // The public interface to execute an entire program.
-    pub fn interpret(&mut self, statements: Vec<Stmt>) -> Result<Value, RuntimeError> {
+    pub fn interpret(&mut self, code: &ResolvedCode) -> Result<Value, RuntimeError> {
         let mut value = Value::NilVal;
-        for stmt in statements.iter() {
+        for stmt in code.statements.iter() {
             value = self.execute(stmt)?;
         }
 
@@ -52,7 +52,7 @@ impl Interpreter {
     }
 
     // The public interface to execute a single statement.
-    pub fn execute(&mut self, statement: &Stmt) -> Result<Value, RuntimeError> {
+    fn execute(&mut self, statement: &Stmt) -> Result<Value, RuntimeError> {
         Ok(self.exec(statement)?)
     }
 
@@ -213,7 +213,7 @@ impl Interpreter {
         }
     }
 
-    pub fn evaluate(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
+    fn evaluate(&mut self, expr: &Expr) -> Result<Value, RuntimeError> {
         use crate::value::Value::*;
         match expr {
             Expr::Assign(id, dist_cell, expr, loc) => {

@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::mem;
 use std::rc::Rc;
 
+use crate::ast::Stmt;
 use crate::error::*;
 use crate::interpreter::*;
 use crate::parser::*;
@@ -11,27 +12,28 @@ use crate::value::*;
 use crate::value::Value::*;
 
 fn interpret(code: &str) -> Result<Value, RuntimeError> {
-    let mut ast = parse(code)?;
-    resolver::resolve(&mut ast).map_err(|e| ParseError::from(e))?;
+    let ast = parse(code)?;
+    let code = resolver::resolve(ast).map_err(|e| ParseError::from(e))?;
     let mut interpreter = Interpreter::new();
 
-    interpreter.interpret(ast)
+    interpreter.interpret(&code)
 }
 
 fn interpret_repl_line(code: &str) -> Result<Value, RuntimeError> {
-    let mut ast = parse_repl_line(code)?;
-    resolver::resolve(&mut ast).map_err(|e| ParseError::from(e))?;
+    let ast = parse_repl_line(code)?;
+    let code = resolver::resolve(ast).map_err(|e| ParseError::from(e))?;
     let mut interpreter = Interpreter::new();
 
-    interpreter.interpret(ast)
+    interpreter.interpret(&code)
 }
 
 fn eval(code: &str) -> Result<Value, RuntimeError> {
-    let mut ast = parse_expression(code)?;
-    resolver::resolve_expression(&mut ast).map_err(|e| ParseError::from(e))?;
+    let exp_ast = parse_expression(code)?;
+    let ast = vec![Stmt::Expression(exp_ast)];
+    let code = resolver::resolve(ast).map_err(|e| ParseError::from(e))?;
     let mut interpreter = Interpreter::new();
 
-    interpreter.evaluate(&ast)
+    interpreter.interpret(&code)
 }
 
 fn script_backtrace() -> Backtrace {
