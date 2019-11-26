@@ -1,6 +1,6 @@
 use std::cell::Cell;
 
-use crate::environment::{FrameIndex, VarLoc};
+use crate::environment::{SlotIndex, VarLoc};
 use crate::source_loc::*;
 
 pub struct ResolvedCode {
@@ -18,7 +18,7 @@ pub enum Stmt {
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     Print(Expr),
     Return(Expr, SourceLoc),
-    Var(String, Cell<FrameIndex>, Expr, SourceLoc),
+    Var(String, Cell<SlotIndex>, Expr, SourceLoc),
     While(Expr, Box<Stmt>),
     WhileIncrement(Expr, Box<Stmt>, Box<Expr>),
 }

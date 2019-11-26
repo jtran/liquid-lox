@@ -34,7 +34,7 @@ use VarResolveDefinedState::*;
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct VarResolveState {
-    pub frame_index: usize,
+    pub slot_index: usize,
     pub defined_state: VarResolveDefinedState,
 }
 
@@ -163,8 +163,8 @@ impl Resolver {
 
                 self.resolve_expression(expr)
             }
-            Stmt::Var(identifier, frame_index_cell, expr, loc) => {
-                self.declare(identifier, frame_index_cell, loc)?;
+            Stmt::Var(identifier, slot_index_cell, expr, loc) => {
+                self.declare(identifier, slot_index_cell, loc)?;
                 self.resolve_expression(expr)?;
                 self.define(identifier, loc)?;
 
@@ -420,19 +420,19 @@ impl Resolver {
                     let distance = (len - 1 - i) as u16;
 
                     return Ok(VarLoc::new(distance,
-                                          resolve_state.frame_index as u8));
+                                          resolve_state.slot_index as u8));
                 }
             }
         }
 
         // Couldn't resolve.  This should turn into a global variable access or
         // runtime error.
-        let frame_index = self.forward_reserve_global_var(identifier, loc)?;
+        let slot_index = self.forward_reserve_global_var(identifier, loc)?;
         // There should always be a global scope.
         assert!(len > 0);
         let distance = (len - 1) as u16;
 
-        Ok(VarLoc::new_global(distance, frame_index as u8))
+        Ok(VarLoc::new_global(distance, slot_index as u8))
     }
 
     fn begin_scope(&mut self) {
@@ -454,9 +454,9 @@ impl Resolver {
                                   identifier: &str,
                                   loc: &SourceLoc) -> Result<usize, ParseErrorCause> {
         let scope = self.scopes.first_mut().expect("Resolver::forward_reserve_global_var: I'm trying to look up the top-most global scope, but there are none");
-        let frame_index = scope.len();
+        let slot_index = scope.len();
         let var_resolve_state = VarResolveState {
-            frame_index,
+            slot_index,
             defined_state: UndefinedVar,
         };
         ensure_scope_index_limit(scope.len(), identifier, loc)?;
@@ -465,17 +465,17 @@ impl Resolver {
             Entry::Occupied(_) => panic!("Resolver::forward_reserve_global_var: I'm trying to forward reserve something that's already declared: {}", identifier),
         };
 
-        Ok(frame_index)
+        Ok(slot_index)
     }
 
     fn declare(&mut self,
                identifier: &str,
-               frame_index_cell: &mut Cell<FrameIndex>,
+               slot_index_cell: &mut Cell<SlotIndex>,
                loc: &SourceLoc) -> Result<(), ParseErrorCause> {
         let scope = self.scopes.last_mut().expect("Resolver::declare: I'm trying to look up the most-local scope, but there are none");
-        let mut frame_index = scope.len();
+        let mut slot_index = scope.len();
         let var_resolve_state = VarResolveState {
-            frame_index,
+            slot_index,
             defined_state: DeclaredVar,
         };
         ensure_scope_index_limit(scope.len(), identifier, loc)?;
@@ -486,11 +486,11 @@ impl Resolver {
                 match state.defined_state {
                     UndefinedVar => {
                         state.defined_state = DeclaredVar;
-                        frame_index = state.frame_index;
+                        slot_index = state.slot_index;
                     }
                     DeclaredVar | DefinedVar => {
                         already_declared = true;
-                        frame_index = state.frame_index;
+                        slot_index = state.slot_index;
                     }
                 };
             })
@@ -499,13 +499,13 @@ impl Resolver {
         if already_declared {
             if self.is_in_global_scope() {
                 // Refer to the previously declared global.
-                frame_index_cell.set(FrameIndex::new(frame_index as u8))
+                slot_index_cell.set(SlotIndex::new(slot_index as u8))
             } else {
                 return Err(ParseErrorCause::new_with_location(*loc, identifier, "Variable with this name already declared in this scope."));
             }
         } else {
             // Refer to the previously declared global.
-            frame_index_cell.set(FrameIndex::new(frame_index as u8));
+            slot_index_cell.set(SlotIndex::new(slot_index as u8));
         }
 
         Ok(())
@@ -514,7 +514,7 @@ impl Resolver {
     fn define(&mut self, identifier: &str, loc: &SourceLoc) -> Result<(), ParseErrorCause> {
         let scope = self.scopes.last_mut().expect("Resolver::define: I'm trying to look up the most-local scope, but there are none");
         let var_resolve_state = VarResolveState {
-            frame_index: scope.len(),
+            slot_index: scope.len(),
             defined_state: DefinedVar,
         };
         ensure_scope_index_limit(scope.len(), identifier, loc)?;

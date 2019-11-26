@@ -26,13 +26,13 @@ impl Interpreter {
     pub fn new() -> Interpreter {
         // Note: this behavior must match the Resolver.
         let mut globals = Environment::new_global();
-        let mut frame_index = globals.next_frame_index();
+        let mut slot_index = globals.next_slot_index();
         for native_id in all_native_ids() {
-            let next_index = frame_index.next();
+            let next_index = slot_index.next();
             globals.define_at(&native_id.to_string(),
-                              frame_index,
+                              slot_index,
                               Value::NativeFunctionVal(native_id));
-            frame_index = next_index.expect("Interpreter::new(): index for FrameIndex overflowed");
+            slot_index = next_index.expect("Interpreter::new(): index for SlotIndex overflowed");
         }
 
         Interpreter {
@@ -69,14 +69,14 @@ impl Interpreter {
             }
             Stmt::Break(loc) => Err(ExecutionInterrupt::Break(*loc)),
             Stmt::Class(class_def) => {
-                let class_frame_index = {
+                let class_slot_index = {
                     // Scope is to end mutable borrow of self.
                     let mut env = self.env.deref().borrow_mut();
-                    let frame_index = env.next_frame_index();
+                    let slot_index = env.next_slot_index();
 
-                    env.define_at(&class_def.name, frame_index, Value::NilVal);
+                    env.define_at(&class_def.name, slot_index, Value::NilVal);
 
-                    frame_index
+                    slot_index
                 };
 
                 // Superclass.
@@ -90,8 +90,8 @@ impl Interpreter {
                             Value::ClassVal(ref class_ref) => {
                                 // Define "super".
                                 let mut new_env = self.new_env_from_current();
-                                let frame_index = new_env.next_frame_index();
-                                new_env.define_at("super", frame_index, superclass_val.clone());
+                                let slot_index = new_env.next_slot_index();
+                                new_env.define_at("super", slot_index, superclass_val.clone());
                                 self.env = Rc::new(RefCell::new(new_env));
 
                                 Some(class_ref.clone())
@@ -131,7 +131,7 @@ impl Interpreter {
                                               FieldTable::new(),
                                               methods);
                 let mut env = self.env.deref().borrow_mut();
-                let var_loc = VarLoc::from(class_frame_index);
+                let var_loc = VarLoc::from(class_slot_index);
                 env.assign_at(&class_def.name, var_loc, Value::ClassVal(class_ref))
                     .map(|_| Value::NilVal )
                     .map_err(|_| ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
@@ -143,8 +143,8 @@ impl Interpreter {
             Stmt::Fun(fun_decl) => {
                 let closure = ClosureRef::new(Some(Rc::new(fun_decl.name.clone())), Rc::new(fun_decl.fun_def.clone()), Rc::clone(&self.env));
                 let mut env = self.env.deref().borrow_mut();
-                let frame_index = env.next_frame_index();
-                env.define_at(&fun_decl.name, frame_index, Value::ClosureVal(closure));
+                let slot_index = env.next_slot_index();
+                env.define_at(&fun_decl.name, slot_index, Value::ClosureVal(closure));
 
                 Ok(Value::NilVal)
             }
@@ -172,10 +172,10 @@ impl Interpreter {
 
                 Err(ExecutionInterrupt::Return(value))
             }
-            Stmt::Var(identifier, frame_index_cell, expr, _) => {
+            Stmt::Var(identifier, slot_index_cell, expr, _) => {
                 let value = self.evaluate(expr)?;
                 let mut env = self.env.deref().borrow_mut();
-                env.define_at(identifier, frame_index_cell.get(), value);
+                env.define_at(identifier, slot_index_cell.get(), value);
 
                 Ok(Value::NilVal)
             }
@@ -454,7 +454,7 @@ impl Interpreter {
                     Some(_) => return Err(RuntimeError::new(*loc, "super didn't evaluate to a class", self.backtrace())),
                 };
 
-                // Instance is always defined one frame before super.
+                // Instance is always defined one scope before super.
                 let this_dist = match super_var_loc.distance().checked_sub(1) {
                     Some(x) => x,
                     None => panic!("location of \"this\" for super expression cannot be computed; probably an interpreter bug; super_var_loc={:?}", super_var_loc),
@@ -568,11 +568,11 @@ impl Interpreter {
                 // Create a new environment, enclosed by closure's environment.
                 let mut new_env = Environment::new_for_call(Rc::clone(closure_ref.env()));
                 // Bind parameters to argument values.
-                let mut frame_index = new_env.next_frame_index();
+                let mut slot_index = new_env.next_slot_index();
                 for (parameter, arg) in fun_def.parameters.iter().zip(args) {
-                    let next_index = frame_index.next();
-                    new_env.define_at(&parameter.name, frame_index, arg);
-                    frame_index = next_index.expect("eval_call: index for FrameIndex overflowed");
+                    let next_index = slot_index.next();
+                    new_env.define_at(&parameter.name, slot_index, arg);
+                    slot_index = next_index.expect("eval_call: index for SlotIndex overflowed");
                 }
                 // Execute function body in new environment.
                 let new_env_sptr = Rc::new(RefCell::new(new_env));

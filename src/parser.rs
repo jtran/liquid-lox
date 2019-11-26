@@ -208,7 +208,7 @@ impl<'a> Parser<'a> {
 
         self.consume(TokenType::Semicolon, "Expect ';' after var declaration.")?;
 
-        Ok(Stmt::Var(id, Cell::new(FrameIndex::placeholder()), expr, loc))
+        Ok(Stmt::Var(id, Cell::new(SlotIndex::placeholder()), expr, loc))
     }
 
     fn statement(&mut self) -> Result<Stmt, ParseErrorCause> {

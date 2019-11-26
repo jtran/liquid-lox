@@ -357,8 +357,8 @@ impl Closure {
     pub fn bind(&self, this_value: Value) -> Closure {
         // Create a new environment.
         let mut new_env = Environment::new_with_parent(Rc::clone(&self.env));
-        let this_frame_index = new_env.next_frame_index();
-        new_env.define_at("this", this_frame_index, this_value);
+        let this_slot_index = new_env.next_slot_index();
+        new_env.define_at("this", this_slot_index, this_value);
 
         Closure::new(self.name.as_ref().map(Rc::clone),
                      Rc::clone(&self.fun_def),
