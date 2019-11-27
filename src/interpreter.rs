@@ -18,14 +18,14 @@ pub struct CallFrame {
 }
 
 pub struct Interpreter {
-    env: Rc<RefCell<Environment>>,
+    env: EnvironmentRef,
     frames: Vec<CallFrame>,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
         // Note: this behavior must match the Resolver.
-        let mut globals = Environment::new_global();
+        let mut globals = EnvironmentRef::new_global();
         let mut slot_index = globals.next_slot_index();
         for native_id in all_native_ids() {
             let next_index = slot_index.next();
@@ -36,7 +36,7 @@ impl Interpreter {
         }
 
         Interpreter {
-            env: Rc::new(RefCell::new(globals)),
+            env: globals,
             frames: Vec::with_capacity(64),
         }
     }
@@ -63,24 +63,17 @@ impl Interpreter {
         match statement {
             Stmt::Block(statements) => {
                 // Create a new environment.
-                let new_env = Rc::new(RefCell::new(self.new_env_from_current()));
+                let new_env = self.new_env_from_current();
 
                 self.exec_in_env(statements.as_slice(), new_env)
             }
             Stmt::Break(loc) => Err(ExecutionInterrupt::Break(*loc)),
             Stmt::Class(class_def) => {
-                let class_slot_index = {
-                    // Scope is to end mutable borrow of self.
-                    let mut env = self.env.deref().borrow_mut();
-                    let slot_index = env.next_slot_index();
-
-                    env.define_at(&class_def.name, slot_index, Value::NilVal);
-
-                    slot_index
-                };
+                let class_slot_index = self.env.next_slot_index();
+                self.env.define_at(&class_def.name, class_slot_index, Value::NilVal);
 
                 // Superclass.
-                let env_before_super = Rc::clone(&self.env);
+                let env_before_super = self.env.clone();
                 let superclass = match &class_def.superclass {
                     None => None,
                     Some(superclass_expr) => {
@@ -92,7 +85,7 @@ impl Interpreter {
                                 let mut new_env = self.new_env_from_current();
                                 let slot_index = new_env.next_slot_index();
                                 new_env.define_at("super", slot_index, superclass_val.clone());
-                                self.env = Rc::new(RefCell::new(new_env));
+                                self.env = new_env;
 
                                 Some(class_ref.clone())
                             }
@@ -107,7 +100,7 @@ impl Interpreter {
                 let mut methods = FieldTable::new();
                 let mut class_methods = FieldTable::new();
                 for method in class_def.methods.iter() {
-                    let closure = ClosureRef::new(Some(Rc::new(method.name.clone())), Rc::new(method.fun_def.clone()), Rc::clone(&self.env));
+                    let closure = ClosureRef::new(Some(Rc::new(method.name.clone())), Rc::new(method.fun_def.clone()), self.env.clone());
                     let container = match method.fun_def.fun_type {
                         FunctionType::ClassMethod => &mut class_methods,
                         FunctionType::Method
@@ -130,9 +123,8 @@ impl Interpreter {
                                               Some(metaclass),
                                               FieldTable::new(),
                                               methods);
-                let mut env = self.env.deref().borrow_mut();
                 let var_loc = VarLoc::from(class_slot_index);
-                env.assign_at(&class_def.name, var_loc, Value::ClassVal(class_ref))
+                self.env.assign_at(&class_def.name, var_loc, Value::ClassVal(class_ref))
                     .map(|_| Value::NilVal )
                     .map_err(|_| ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
                                     &format!("Undefined variable for class; this is probably an interpreter bug: {}", class_def.name),
@@ -141,10 +133,9 @@ impl Interpreter {
             Stmt::Continue(loc) => Err(ExecutionInterrupt::Continue(*loc)),
             Stmt::Expression(expr) => self.evaluate(expr).map_err(|err| err.into()),
             Stmt::Fun(fun_decl) => {
-                let closure = ClosureRef::new(Some(Rc::new(fun_decl.name.clone())), Rc::new(fun_decl.fun_def.clone()), Rc::clone(&self.env));
-                let mut env = self.env.deref().borrow_mut();
-                let slot_index = env.next_slot_index();
-                env.define_at(&fun_decl.name, slot_index, Value::ClosureVal(closure));
+                let closure = ClosureRef::new(Some(Rc::new(fun_decl.name.clone())), Rc::new(fun_decl.fun_def.clone()), self.env.clone());
+                let slot_index = self.env.next_slot_index();
+                self.env.define_at(&fun_decl.name, slot_index, Value::ClosureVal(closure));
 
                 Ok(Value::NilVal)
             }
@@ -174,8 +165,7 @@ impl Interpreter {
             }
             Stmt::Var(identifier, slot_index_cell, expr, _) => {
                 let value = self.evaluate(expr)?;
-                let mut env = self.env.deref().borrow_mut();
-                env.define_at(identifier, slot_index_cell.get(), value);
+                self.env.define_at(identifier, slot_index_cell.get(), value);
 
                 Ok(Value::NilVal)
             }
@@ -218,8 +208,7 @@ impl Interpreter {
         match expr {
             Expr::Assign(id, dist_cell, expr, loc) => {
                 let value = self.evaluate(expr)?;
-                let mut env = self.env.deref().borrow_mut();
-                env.assign_at(&id, dist_cell.get(), value.clone())
+                self.env.assign_at(&id, dist_cell.get(), value.clone())
                     .map_err(|_| {
                         RuntimeError::new(*loc, &format!("Undefined variable '{}'.", &id), self.backtrace())
                     })?;
@@ -312,7 +301,7 @@ impl Interpreter {
                 self.eval_call(callee_val, arg_vals, *loc)
             }
             Expr::Function(fun_def) => {
-                let closure = ClosureRef::new(None, Rc::new(fun_def.deref().clone()), Rc::clone(&self.env));
+                let closure = ClosureRef::new(None, Rc::new(fun_def.deref().clone()), self.env.clone());
 
                 Ok(Value::ClosureVal(closure))
             }
@@ -444,10 +433,8 @@ impl Interpreter {
                 }
             }
             Expr::Super(super_dist_cell, id, loc) => {
-                let env = self.env.deref().borrow();
-
                 let super_var_loc = super_dist_cell.get();
-                let superclass = match env.get_at("super", super_var_loc) {
+                let superclass = match self.env.get_at("super", super_var_loc) {
                     // Interpreter bug?
                     None => return Err(RuntimeError::new(*loc, "Undefined variable: super", self.backtrace())),
                     Some(Value::ClassVal(class)) => class,
@@ -462,7 +449,7 @@ impl Interpreter {
                 let this_var_loc = VarLoc::new(this_dist,
                                                super_var_loc.index());
 
-                match env.get_at(id, this_var_loc) {
+                match self.env.get_at(id, this_var_loc) {
                     // Interpreter bug?
                     None => Err(RuntimeError::new(*loc, "Undefined variable \"this\" when evaluating super expression", self.backtrace())),
                     Some(Value::ClassVal(class_ref)) => {
@@ -478,9 +465,7 @@ impl Interpreter {
                 }
             }
             Expr::Variable(id, dist_cell, loc) => {
-                let env = self.env.deref().borrow();
-
-                env.get_at(id, dist_cell.get())
+                self.env.get_at(id, dist_cell.get())
                     // In the case that the variable is not in the environment,
                     // generate a runtime error.
                     .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined variable '{}'.", id), self.backtrace()))
@@ -502,7 +487,7 @@ impl Interpreter {
     }
 
     // Executes statements in the given environment.
-    fn exec_in_env<S>(&mut self, statements: &[S], env: Rc<RefCell<Environment>>)
+    fn exec_in_env<S>(&mut self, statements: &[S], env: EnvironmentRef)
         -> Result<Value, ExecutionInterrupt>
         where S: AsRef<Stmt>
     {
@@ -566,7 +551,7 @@ impl Interpreter {
                 };
                 self.frames.push(frame);
                 // Create a new environment, enclosed by closure's environment.
-                let mut new_env = Environment::new_for_call(Rc::clone(closure_ref.env()));
+                let mut new_env = EnvironmentRef::new_for_call(closure_ref.env().clone());
                 // Bind parameters to argument values.
                 let mut slot_index = new_env.next_slot_index();
                 for (parameter, arg) in fun_def.parameters.iter().zip(args) {
@@ -575,8 +560,7 @@ impl Interpreter {
                     slot_index = next_index.expect("eval_call: index for SlotIndex overflowed");
                 }
                 // Execute function body in new environment.
-                let new_env_sptr = Rc::new(RefCell::new(new_env));
-                let return_value_result = self.exec_in_env(fun_def.body.as_slice(), new_env_sptr);
+                let return_value_result = self.exec_in_env(fun_def.body.as_slice(), new_env);
 
                 // Pop the call frame.
                 self.frames.pop();
@@ -584,12 +568,11 @@ impl Interpreter {
                 match fun_def.fun_type {
                     // For initializers, always return the instance.
                     FunctionType::Initializer => {
-                        let env = closure_ref.env().deref().borrow();
                         // TODO: There must be a better way to find the
                         // instance.
                         let this_var_loc = VarLoc::new(0, 0);
 
-                        match env.get_at("this", this_var_loc) {
+                        match closure_ref.env().get_at("this", this_var_loc) {
                             Some(value) => Ok(value),
                             None => panic!("Couldn't find 'this' in initializer environment at index 0: {:?}", fun_def),
                         }
@@ -627,10 +610,10 @@ impl Interpreter {
         }
     }
 
-    fn new_env_from_current(&self) -> Environment {
+    fn new_env_from_current(&self) -> EnvironmentRef {
         // TODO: We should be able to optimize away creating an entire
         // environment since this isn't for a function call.
-        Environment::new_with_parent(Rc::clone(&self.env))
+        EnvironmentRef::new_with_parent(self.env.clone())
     }
 
     fn backtrace(&self) -> Backtrace {

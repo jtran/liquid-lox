@@ -281,7 +281,7 @@ pub struct ClosureRef(Rc<Closure>);
 impl ClosureRef {
     pub fn new(name: Option<Rc<String>>,
                fun_def: Rc<FunctionDefinition>,
-               env: Rc<RefCell<Environment>>) -> ClosureRef {
+               env: EnvironmentRef) -> ClosureRef {
         let closure = Closure::new(name, fun_def, env);
 
         ClosureRef(Rc::new(closure))
@@ -307,7 +307,7 @@ impl ClosureRef {
         &self.0.fun_def
     }
 
-    pub fn env(&self) -> &Rc<RefCell<Environment>> {
+    pub fn env(&self) -> &EnvironmentRef {
         &self.0.env
     }
 
@@ -328,13 +328,13 @@ impl PartialEq for ClosureRef {
 pub struct Closure {
     name: Option<Rc<String>>,
     fun_def: Rc<FunctionDefinition>,
-    env: Rc<RefCell<Environment>>,
+    env: EnvironmentRef,
 }
 
 impl Closure {
     pub fn new(name: Option<Rc<String>>,
                fun_def: Rc<FunctionDefinition>,
-               env: Rc<RefCell<Environment>>) -> Closure {
+               env: EnvironmentRef) -> Closure {
         Closure {
             name,
             fun_def,
@@ -356,13 +356,13 @@ impl Closure {
 
     pub fn bind(&self, this_value: Value) -> Closure {
         // Create a new environment.
-        let mut new_env = Environment::new_with_parent(Rc::clone(&self.env));
+        let mut new_env = EnvironmentRef::new_with_parent(self.env.clone());
         let this_slot_index = new_env.next_slot_index();
         new_env.define_at("this", this_slot_index, this_value);
 
         Closure::new(self.name.as_ref().map(Rc::clone),
                      Rc::clone(&self.fun_def),
-                     Rc::new(RefCell::new(new_env)))
+                     new_env)
     }
 }
 

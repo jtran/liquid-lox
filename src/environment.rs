@@ -90,6 +90,46 @@ impl From<&VarLoc> for SlotIndex {
     }
 }
 
+// An EnvironmentRef is a non-empty, singly linked list of scopes.  Each scope
+// is a mapping from SlotIndex keys to Values.
+//
+// EnvironmentRefs use interior mutability and are stored completely on the
+// heap.  Cloning is a cheap pointer copy.
+#[derive(Clone, Debug, PartialEq)]
+pub struct EnvironmentRef(Rc<RefCell<Environment>>);
+
+impl EnvironmentRef {
+    pub fn new_global() -> EnvironmentRef {
+        EnvironmentRef(Rc::new(RefCell::new(Environment::new_global())))
+    }
+
+    pub fn new_with_parent(enclosing: EnvironmentRef) -> EnvironmentRef {
+        EnvironmentRef(Rc::new(RefCell::new(Environment::new_with_parent(enclosing.0))))
+    }
+
+    pub fn new_for_call(enclosing: EnvironmentRef) -> EnvironmentRef {
+        EnvironmentRef(Rc::new(RefCell::new(Environment::new_for_call(enclosing.0))))
+    }
+
+    pub fn next_slot_index(&self) -> SlotIndex {
+        self.0.deref().borrow().next_slot_index()
+    }
+
+    pub fn define_at(&mut self, name: &str, slot_index: SlotIndex, value: Value) {
+        self.0.deref().borrow_mut().define_at(name, slot_index, value)
+    }
+
+    pub fn get_at(&self, name: &str, var_loc: VarLoc) -> Option<Value> {
+        self.0.deref().borrow().get_at(name, var_loc)
+    }
+
+    pub fn assign_at(&mut self, name: &str, var_loc: VarLoc, new_value: Value)
+        -> Result<(), ()>
+    {
+        self.0.deref().borrow_mut().assign_at(name, var_loc, new_value)
+    }
+}
+
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum LookupFailure {
     NotDefined,
@@ -98,7 +138,7 @@ enum LookupFailure {
 
 // We store values in a Vec so that lookups are fast.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Environment {
+struct Environment {
     values: Vec<Option<Value>>,
     enclosing: Option<Rc<RefCell<Environment>>>,
 }
