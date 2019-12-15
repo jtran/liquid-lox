@@ -100,8 +100,8 @@ impl ClassRef {
         ClassRef(Rc::new(RefCell::new(rt_class)))
     }
 
-    pub fn get(&self, name: &str) -> Option<Value> {
-        self.0.borrow().get(name, self.clone())
+    pub fn field_value(&self, name: &str) -> Option<Value> {
+        self.0.borrow().field_value(name)
     }
 
     pub fn set(&mut self, name: &str, new_value: Value) {
@@ -112,16 +112,8 @@ impl ClassRef {
         self.0.borrow().find_method(name)
     }
 
-    pub fn bound_method(&self, name: &str, instance_ref: InstanceRef) -> Option<Value> {
-        self.0.borrow().bound_method(name, instance_ref)
-    }
-
     pub fn find_class_method(&self, name: &str) -> Option<Value> {
         self.0.borrow().find_class_method(name)
-    }
-
-    pub fn bound_class_method(&self, name: &str, class_ref: ClassRef) -> Option<Value> {
-        self.0.borrow().bound_class_method(name, class_ref)
     }
 
     pub fn name(&self) -> String {
@@ -156,13 +148,8 @@ impl RuntimeClass {
         }
     }
 
-    pub fn get(&self, name: &str, this_ref: ClassRef) -> Option<Value> {
-        let v = self.fields.get(name);
-        if v.is_some() {
-            return v;
-        }
-
-        self.bound_class_method(name, this_ref)
+    pub fn field_value(&self, name: &str) -> Option<Value> {
+        self.fields.get(name)
     }
 
     pub fn set(&mut self, name: &str, new_value: Value) {
@@ -181,18 +168,6 @@ impl RuntimeClass {
         }
     }
 
-    pub fn bound_method(&self, name: &str, instance_ref: InstanceRef) -> Option<Value> {
-        match self.find_method(name) {
-            None => None,
-            Some(ClosureVal(cls)) => {
-                let bound_method = cls.bind(Value::InstanceVal(instance_ref));
-
-                Some(Value::ClosureVal(bound_method))
-            }
-            Some(v) => panic!("Accessing a property and looking up a method resulted in a non-closure value: name={}, class={:?}, v={:?}", name, self, v),
-        }
-    }
-
     pub fn find_class_method(&self, name: &str) -> Option<Value> {
         let v = self.fields.get(name);
         if v.is_some() {
@@ -202,18 +177,6 @@ impl RuntimeClass {
         match &self.superclass {
             None => None,
             Some(superclass) => superclass.find_class_method(name),
-        }
-    }
-
-    pub fn bound_class_method(&self, name: &str, class_ref: ClassRef) -> Option<Value> {
-        match self.find_class_method(name) {
-            None => None,
-            Some(ClosureVal(cls)) => {
-                let bound_method = cls.bind(Value::ClassVal(class_ref));
-
-                Some(Value::ClosureVal(bound_method))
-            }
-            Some(v) => panic!("Accessing a property and looking up a method resulted in a non-closure value: name={}, class={:?}, v={:?}", name, self, v),
         }
     }
 }
@@ -228,12 +191,16 @@ impl InstanceRef {
         InstanceRef(Rc::new(RefCell::new(instance)))
     }
 
-    pub fn get(&self, name: &str) -> Option<Value> {
-        self.0.borrow().get(name, self.clone())
+    pub fn field_value(&self, name: &str) -> Option<Value> {
+        self.0.borrow().field_value(name)
     }
 
     pub fn set(&mut self, name: &str, new_value: Value) {
         self.0.deref().borrow_mut().set(name, new_value)
+    }
+
+    pub fn class(&self) -> ClassRef {
+        self.0.borrow().class.clone()
     }
 
     pub fn class_name(&self) -> String {
@@ -261,13 +228,8 @@ impl Instance {
         }
     }
 
-    pub fn get(&self, name: &str, this_ref: InstanceRef) -> Option<Value> {
-        let v = self.fields.get(name);
-        if v.is_some() {
-            return v;
-        }
-
-        self.class.bound_method(name, this_ref)
+    pub fn field_value(&self, name: &str) -> Option<Value> {
+        self.fields.get(name)
     }
 
     pub fn set(&mut self, name: &str, new_value: Value) {
@@ -284,10 +246,6 @@ impl ClosureRef {
                env: EnvironmentRef) -> ClosureRef {
         let closure = Closure::new(name, fun_def, env);
 
-        ClosureRef(Rc::new(closure))
-    }
-
-    fn new_from_closure(closure: Closure) -> ClosureRef {
         ClosureRef(Rc::new(closure))
     }
 
@@ -311,10 +269,10 @@ impl ClosureRef {
         &self.0.env
     }
 
-    pub fn bind(&self, this_value: Value) -> ClosureRef {
-        let raw_closure = self.0.bind(this_value);
-
-        ClosureRef::new_from_closure(raw_closure)
+    pub fn with_env(&self, env: EnvironmentRef) -> ClosureRef {
+        ClosureRef::new(self.0.name.as_ref().map(Rc::clone),
+                        Rc::clone(&self.0.fun_def),
+                        env)
     }
 }
 
@@ -324,7 +282,7 @@ impl PartialEq for ClosureRef {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Closure {
     name: Option<Rc<String>>,
     fun_def: Rc<FunctionDefinition>,
@@ -352,17 +310,6 @@ impl Closure {
 
     pub fn parameters(&self) -> &[Parameter] {
         &self.fun_def.parameters
-    }
-
-    pub fn bind(&self, this_value: Value) -> Closure {
-        // Create a new environment.
-        let mut new_env = EnvironmentRef::new_with_parent(self.env.clone());
-        let this_slot_index = new_env.next_slot_index();
-        new_env.define_at("this", this_slot_index, this_value);
-
-        Closure::new(self.name.as_ref().map(Rc::clone),
-                     Rc::clone(&self.fun_def),
-                     new_env)
     }
 }
 
@@ -425,14 +372,6 @@ impl fmt::Debug for Value {
             NumberVal(x) => write!(f, "NumberVal({:?})", x),
             StringVal(s) => write!(f, "StringVal({:?})", s),
         }
-    }
-}
-
-// We can't derive this because the Rc recursively prints the values in the
-// environment, causing a stack overflow.
-impl fmt::Debug for Closure {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Closure({:?}, {:?}, Rc(...))", self.name, self.fun_def)
     }
 }
 

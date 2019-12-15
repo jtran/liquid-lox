@@ -18,24 +18,28 @@ pub struct CallFrame {
 }
 
 pub struct Interpreter {
+    env_mgr: EnvironmentManager,
     env: EnvironmentRef,
     frames: Vec<CallFrame>,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
+        let mut env_mgr = EnvironmentManager::new();
         // Note: this behavior must match the Resolver.
-        let mut globals = EnvironmentRef::new_global();
-        let mut slot_index = globals.next_slot_index();
+        let globals = env_mgr.new_global();
+        let mut slot_index = env_mgr.next_slot_index(globals);
         for native_id in all_native_ids() {
             let next_index = slot_index.next();
-            globals.define_at(&native_id.to_string(),
+            env_mgr.define_at(globals,
+                              &native_id.to_string(),
                               slot_index,
                               Value::NativeFunctionVal(native_id));
             slot_index = next_index.expect("Interpreter::new(): index for SlotIndex overflowed");
         }
 
         Interpreter {
+            env_mgr,
             env: globals,
             frames: Vec::with_capacity(64),
         }
@@ -69,8 +73,8 @@ impl Interpreter {
             }
             Stmt::Break(loc) => Err(ExecutionInterrupt::Break(*loc)),
             Stmt::Class(class_def) => {
-                let class_slot_index = self.env.next_slot_index();
-                self.env.define_at(&class_def.name, class_slot_index, Value::NilVal);
+                let class_slot_index = self.env_mgr.next_slot_index(self.env);
+                self.env_mgr.define_at(self.env, &class_def.name, class_slot_index, Value::NilVal);
 
                 // Superclass.
                 let env_before_super = self.env.clone();
@@ -82,9 +86,9 @@ impl Interpreter {
                         match superclass_val {
                             Value::ClassVal(ref class_ref) => {
                                 // Define "super".
-                                let mut new_env = self.new_env_from_current();
-                                let slot_index = new_env.next_slot_index();
-                                new_env.define_at("super", slot_index, superclass_val.clone());
+                                let new_env = self.new_env_from_current();
+                                let slot_index = self.env_mgr.next_slot_index(new_env);
+                                self.env_mgr.define_at(new_env, "super", slot_index, superclass_val.clone());
                                 self.env = new_env;
 
                                 Some(class_ref.clone())
@@ -124,7 +128,7 @@ impl Interpreter {
                                               FieldTable::new(),
                                               methods);
                 let var_loc = VarLoc::from(class_slot_index);
-                self.env.assign_at(&class_def.name, var_loc, Value::ClassVal(class_ref))
+                self.env_mgr.assign_at(self.env, &class_def.name, var_loc, Value::ClassVal(class_ref))
                     .map(|_| Value::NilVal )
                     .map_err(|_| ExecutionInterrupt::Error(RuntimeError::new(class_def.source_loc,
                                     &format!("Undefined variable for class; this is probably an interpreter bug: {}", class_def.name),
@@ -134,8 +138,8 @@ impl Interpreter {
             Stmt::Expression(expr) => self.evaluate(expr).map_err(|err| err.into()),
             Stmt::Fun(fun_decl) => {
                 let closure = ClosureRef::new(Some(Rc::new(fun_decl.name.clone())), Rc::new(fun_decl.fun_def.clone()), self.env.clone());
-                let slot_index = self.env.next_slot_index();
-                self.env.define_at(&fun_decl.name, slot_index, Value::ClosureVal(closure));
+                let slot_index = self.env_mgr.next_slot_index(self.env);
+                self.env_mgr.define_at(self.env, &fun_decl.name, slot_index, Value::ClosureVal(closure));
 
                 Ok(Value::NilVal)
             }
@@ -165,7 +169,7 @@ impl Interpreter {
             }
             Stmt::Var(identifier, slot_index_cell, expr, _) => {
                 let value = self.evaluate(expr)?;
-                self.env.define_at(identifier, slot_index_cell.get(), value);
+                self.env_mgr.define_at(self.env, identifier, slot_index_cell.get(), value);
 
                 Ok(Value::NilVal)
             }
@@ -208,7 +212,7 @@ impl Interpreter {
         match expr {
             Expr::Assign(id, dist_cell, expr, loc) => {
                 let value = self.evaluate(expr)?;
-                self.env.assign_at(&id, dist_cell.get(), value.clone())
+                self.env_mgr.assign_at(self.env, &id, dist_cell.get(), value.clone())
                     .map_err(|_| {
                         RuntimeError::new(*loc, &format!("Undefined variable '{}'.", &id), self.backtrace())
                     })?;
@@ -310,13 +314,13 @@ impl Interpreter {
 
                 match left_val {
                     Value::ClassVal(class_ref) => {
-                        match class_ref.get(property_name) {
+                        match self.class_get(&class_ref, property_name) {
                             Some(v) => Ok(v),
                             None => Err(RuntimeError::new(*loc, &format!("Undefined property '{}'.", property_name), self.backtrace())),
                         }
                     }
                     Value::InstanceVal(instance_ref) => {
-                        match instance_ref.get(property_name) {
+                        match self.instance_get(&instance_ref, property_name) {
                             Some(v) => Ok(v),
                             None => Err(RuntimeError::new(*loc, &format!("Undefined property '{}'.", property_name), self.backtrace())),
                         }
@@ -434,7 +438,7 @@ impl Interpreter {
             }
             Expr::Super(super_dist_cell, id, loc) => {
                 let super_var_loc = super_dist_cell.get();
-                let superclass = match self.env.get_at("super", super_var_loc) {
+                let superclass = match self.env_mgr.get_at(self.env, "super", super_var_loc) {
                     // Interpreter bug?
                     None => return Err(RuntimeError::new(*loc, "Undefined variable: super", self.backtrace())),
                     Some(Value::ClassVal(class)) => class,
@@ -449,15 +453,15 @@ impl Interpreter {
                 let this_var_loc = VarLoc::new(this_dist,
                                                super_var_loc.index());
 
-                match self.env.get_at(id, this_var_loc) {
+                match self.env_mgr.get_at(self.env, id, this_var_loc) {
                     // Interpreter bug?
                     None => Err(RuntimeError::new(*loc, "Undefined variable \"this\" when evaluating super expression", self.backtrace())),
-                    Some(Value::ClassVal(class_ref)) => {
-                        superclass.bound_class_method(id, class_ref)
+                    Some(Value::ClassVal(_)) => {
+                        self.bound_class_method(&superclass, id)
                             .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property '{}'.", id), self.backtrace()))
                     }
                     Some(Value::InstanceVal(instance_ref)) => {
-                        superclass.bound_method(id, instance_ref)
+                        self.bound_method(&superclass, id, instance_ref)
                             .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined property '{}'.", id), self.backtrace()))
                     }
                     // Interpreter bug?
@@ -465,7 +469,7 @@ impl Interpreter {
                 }
             }
             Expr::Variable(id, dist_cell, loc) => {
-                self.env.get_at(id, dist_cell.get())
+                self.env_mgr.get_at(self.env, id, dist_cell.get())
                     // In the case that the variable is not in the environment,
                     // generate a runtime error.
                     .ok_or_else(|| RuntimeError::new(*loc, &format!("Undefined variable '{}'.", id), self.backtrace()))
@@ -509,6 +513,65 @@ impl Interpreter {
         result
     }
 
+    // Bind a closure to a value of `this` so that you can call a bound method.
+    fn bind_closure(&mut self, closure: &ClosureRef, this_value: Value) -> ClosureRef {
+        // Create a new environment.
+        let new_env = self.env_mgr.new_with_parent(*closure.env());
+        let this_slot_index = self.env_mgr.next_slot_index(new_env);
+        self.env_mgr.define_at(new_env, "this", this_slot_index, this_value);
+
+        closure.with_env(new_env)
+    }
+
+    // Get member from an instance.
+    fn instance_get(&mut self, instance: &InstanceRef, name: &str) -> Option<Value> {
+        let v = instance.field_value(name);
+        if v.is_some() {
+            return v;
+        }
+
+        self.bound_method(&instance.class(), name, instance.clone())
+    }
+
+    // Get member from a class.
+    fn class_get(&mut self, class_ref: &ClassRef, name: &str) -> Option<Value> {
+        let v = class_ref.field_value(name);
+        if v.is_some() {
+            return v;
+        }
+
+        self.bound_class_method(&class_ref, name)
+    }
+
+    fn bound_method(&mut self,
+                    cls: &ClassRef,
+                    name: &str,
+                    this_instance_ref: InstanceRef) -> Option<Value> {
+        match cls.find_method(name) {
+            None => None,
+            Some(Value::ClosureVal(closure)) => {
+                let bound_meth = self.bind_closure(&closure, Value::InstanceVal(this_instance_ref));
+
+                Some(Value::ClosureVal(bound_meth))
+            }
+            Some(v) => panic!("Accessing a property and looking up a method resulted in a non-closure value: name={}, class={:?}, v={:?}", name, cls, v),
+        }
+    }
+
+    fn bound_class_method(&mut self,
+                          class_ref: &ClassRef,
+                          name: &str) -> Option<Value> {
+        match class_ref.find_class_method(name) {
+            None => None,
+            Some(Value::ClosureVal(closure)) => {
+                let bound_meth = self.bind_closure(&closure, Value::ClassVal(class_ref.clone()));
+
+                Some(Value::ClosureVal(bound_meth))
+            }
+            Some(v) => panic!("Accessing a property and looking up a method resulted in a non-closure value: name={}, class={:?}, v={:?}", name, class_ref, v),
+        }
+    }
+
     fn eval_call(&mut self, callee: Value, args: Vec<Value>, loc: SourceLoc)
         -> Result<Value, RuntimeError>
     {
@@ -534,7 +597,7 @@ impl Interpreter {
                     Some(Value::ClosureVal(closure)) => {
                         self.check_call_arity(closure.arity(), args.len(), &loc)?;
 
-                        let bound_method = closure.bind(instance_val);
+                        let bound_method = self.bind_closure(&closure, instance_val);
                         return self.eval_call(Value::ClosureVal(bound_method), args, loc);
                     }
                     Some(v) => return Err(RuntimeError::new(loc, &format!("The \"init\" property of a class should be a function, but it isn't: {}", v), self.backtrace())),
@@ -550,12 +613,12 @@ impl Interpreter {
                 };
                 self.frames.push(frame);
                 // Create a new environment, enclosed by closure's environment.
-                let mut new_env = EnvironmentRef::new_for_call(closure_ref.env().clone());
+                let new_env = self.env_mgr.new_for_call(closure_ref.env().clone());
                 // Bind parameters to argument values.
-                let mut slot_index = new_env.next_slot_index();
+                let mut slot_index = self.env_mgr.next_slot_index(new_env);
                 for (parameter, arg) in fun_def.parameters.iter().zip(args) {
                     let next_index = slot_index.next();
-                    new_env.define_at(&parameter.name, slot_index, arg);
+                    self.env_mgr.define_at(new_env, &parameter.name, slot_index, arg);
                     slot_index = next_index.expect("eval_call: index for SlotIndex overflowed");
                 }
                 // Execute function body in new environment.
@@ -571,7 +634,7 @@ impl Interpreter {
                         // instance.
                         let this_var_loc = VarLoc::new(0, 0);
 
-                        match closure_ref.env().get_at("this", this_var_loc) {
+                        match self.env_mgr.get_at(*closure_ref.env(), "this", this_var_loc) {
                             Some(value) => Ok(value),
                             None => panic!("Couldn't find 'this' in initializer environment at index 0: {:?}", fun_def),
                         }
@@ -609,10 +672,10 @@ impl Interpreter {
         }
     }
 
-    fn new_env_from_current(&self) -> EnvironmentRef {
+    fn new_env_from_current(&mut self) -> EnvironmentRef {
         // TODO: We should be able to optimize away creating an entire
         // environment since this isn't for a function call.
-        EnvironmentRef::new_with_parent(self.env.clone())
+        self.env_mgr.new_with_parent(self.env.clone())
     }
 
     fn backtrace(&self) -> Backtrace {

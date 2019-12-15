@@ -1,3 +1,4 @@
+extern crate generational_arena;
 #[macro_use]
 extern crate lazy_static;
 extern crate unicode_segmentation;

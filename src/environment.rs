@@ -1,7 +1,6 @@
-use std::cell::RefCell;
-use std::ops::Deref;
-use std::rc::Rc;
 use std::{u8, u16};
+
+use generational_arena::{Arena, Index as ArenaIndex};
 
 use crate::value::*;
 
@@ -90,78 +89,41 @@ impl From<&VarLoc> for SlotIndex {
     }
 }
 
-// An EnvironmentRef is a non-empty, singly linked list of scopes.  Each scope
-// is a mapping from SlotIndex keys to Values.
+// An EnvironmentRef is an index in the arena.  It references a non-empty,
+// singly-linked list of scopes.  Each scope is a mapping from SlotIndex keys to
+// Values.
 //
-// EnvironmentRefs use interior mutability and are stored completely on the
-// heap.  Cloning is a cheap pointer copy.
-#[derive(Clone, Debug, PartialEq)]
-pub struct EnvironmentRef(Rc<RefCell<Environment>>);
-
-impl EnvironmentRef {
-    pub fn new_global() -> EnvironmentRef {
-        EnvironmentRef(Rc::new(RefCell::new(Environment::new_global())))
-    }
-
-    pub fn new_with_parent(enclosing: EnvironmentRef) -> EnvironmentRef {
-        EnvironmentRef(Rc::new(RefCell::new(Environment::new_with_parent(enclosing.0))))
-    }
-
-    pub fn new_for_call(enclosing: EnvironmentRef) -> EnvironmentRef {
-        EnvironmentRef(Rc::new(RefCell::new(Environment::new_for_call(enclosing.0))))
-    }
-
-    pub fn next_slot_index(&self) -> SlotIndex {
-        self.0.deref().borrow().next_slot_index()
-    }
-
-    pub fn define_at(&mut self, name: &str, slot_index: SlotIndex, value: Value) {
-        self.0.deref().borrow_mut().define_at(name, slot_index, value)
-    }
-
-    pub fn get_at(&self, name: &str, var_loc: VarLoc) -> Option<Value> {
-        self.0.deref().borrow().get_at(name, var_loc)
-    }
-
-    pub fn assign_at(&mut self, name: &str, var_loc: VarLoc, new_value: Value)
-        -> Result<(), ()>
-    {
-        self.0.deref().borrow_mut().assign_at(name, var_loc, new_value)
-    }
+// EnvironmentRefs use Copy semantics; it is a cheap pointer copy.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub struct EnvironmentRef {
+    layer_index: ArenaIndex,
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-enum LookupFailure {
-    NotDefined,
-    DistanceTooFar,
+impl EnvironmentRef {
+    pub fn layer_index(&self) -> ArenaIndex {
+        self.layer_index
+    }
 }
 
 // We store values in a Vec so that lookups are fast.
 #[derive(Clone, Debug, PartialEq)]
-struct Environment {
+struct EnvironmentLayer {
     values: Vec<Option<Value>>,
-    enclosing: Option<Rc<RefCell<Environment>>>,
+    enclosing_index: Option<ArenaIndex>,
 }
 
-impl Environment {
-    pub fn new_global() -> Environment {
-        Environment {
+impl EnvironmentLayer {
+    pub fn new_global() -> EnvironmentLayer {
+        EnvironmentLayer {
             values: Vec::new(),
-            enclosing: None,
+            enclosing_index: None,
         }
     }
 
-    pub fn new_with_parent(enclosing: Rc<RefCell<Environment>>) -> Environment {
-        Environment {
+    pub fn new_with_parent(enclosing: EnvironmentRef) -> EnvironmentLayer {
+        EnvironmentLayer {
             values: Vec::new(),
-            enclosing: Some(enclosing),
-        }
-    }
-
-    pub fn new_for_call(enclosing: Rc<RefCell<Environment>>) -> Environment {
-        Environment {
-            values: Vec::new(),
-            enclosing: Some(enclosing),
+            enclosing_index: Some(enclosing.layer_index()),
         }
     }
 
@@ -195,70 +157,107 @@ impl Environment {
         }
     }
 
-    pub fn get_at(&self, name: &str, var_loc: VarLoc) -> Option<Value> {
-        match self.get_at_distance(var_loc.index, var_loc.distance) {
-            Err(LookupFailure::DistanceTooFar) => panic!("tried to look up a variable at a distance greater than exists: {} index={} distance={}", name, var_loc.index, var_loc.distance),
-            Err(LookupFailure::NotDefined) => None,
-            Ok(v) => Some(v),
+    pub fn get(&self, slot_index: u8) -> Option<Option<Value>> {
+        self.values.get(usize::from(slot_index)).cloned()
+    }
+
+    pub fn assign_at(&mut self, index: u8, new_value: Value) -> Result<(), ()> {
+        let usize_index = usize::from(index);
+        if usize_index >= self.values.len() {
+            // Not found.
+            return Err(());
+        }
+
+        self.values[usize_index] = Some(new_value);
+
+        return Ok(());
+    }
+}
+
+#[derive(Debug)]
+pub struct EnvironmentManager {
+    layers: Arena<EnvironmentLayer>,
+}
+
+impl EnvironmentManager {
+    pub fn new() -> EnvironmentManager {
+        EnvironmentManager {
+            layers: Arena::new(),
         }
     }
 
-    // If there's a distance error, it's probably a bug in the resolver.
-    fn get_at_distance(&self, index: u8, distance: u16) -> Result<Value, LookupFailure> {
-        if distance == 0 {
-            return match self.values.get(usize::from(index)) {
-                None => Err(LookupFailure::NotDefined),
-                Some(None) => Err(LookupFailure::NotDefined),
-                Some(Some(v)) => Ok(v.clone())
-            };
-        }
+    pub fn new_global(&mut self) -> EnvironmentRef {
+        assert!(self.layers.is_empty());
 
-        // TODO: implement this without recursion.
-        match self.enclosing {
-            None => Err(LookupFailure::DistanceTooFar),
-            Some(ref env_cell_rc) => {
-                let env = env_cell_rc.deref().borrow();
+        let layer = EnvironmentLayer::new_global();
+        let layer_index = self.layers.insert(layer);
 
-                env.get_at_distance(index, distance - 1)
+        EnvironmentRef { layer_index }
+    }
+
+    pub fn new_with_parent(&mut self, enclosing: EnvironmentRef) -> EnvironmentRef {
+        let layer = EnvironmentLayer::new_with_parent(enclosing);
+        let layer_index = self.layers.insert(layer);
+
+        EnvironmentRef { layer_index }
+    }
+
+    pub fn new_for_call(&mut self, enclosing: EnvironmentRef) -> EnvironmentRef {
+        self.new_with_parent(enclosing)
+    }
+
+    pub fn next_slot_index(&self, env_ref: EnvironmentRef) -> SlotIndex {
+        self.layers[env_ref.layer_index()].next_slot_index()
+    }
+
+    pub fn define_at(&mut self, env_ref: EnvironmentRef, name: &str, slot_index: SlotIndex, value: Value) {
+        let layer = &mut self.layers[env_ref.layer_index()];
+        layer.define_at(name, slot_index, value);
+    }
+
+    pub fn get_at(&self, env_ref: EnvironmentRef, name: &str, var_loc: VarLoc) -> Option<Value> {
+        let mut distance = var_loc.distance;
+        let mut layer_index = env_ref.layer_index();
+        loop {
+            let layer = &self.layers[layer_index];
+            if distance == 0 {
+                return match layer.get(var_loc.index) {
+                    None => None,
+                    Some(None) => None,
+                    Some(Some(v)) => Some(v.clone())
+                };
+            }
+
+            match layer.enclosing_index {
+                // If we hit this, it's probably a bug in the resolver.
+                None => panic!("tried to look up a variable at a distance greater than exists: {} var_loc={:?}", name, var_loc),
+                Some(encl_index) => {
+                    layer_index = encl_index;
+                    distance = distance - 1;
+                }
             }
         }
     }
 
     // Returns an error result if the key isn't already defined.
-    pub fn assign_at(&mut self, name: &str, var_loc: VarLoc, new_value: Value)
+    pub fn assign_at(&mut self, env_ref: EnvironmentRef, name: &str, var_loc: VarLoc, new_value: Value)
         -> Result<(), ()>
     {
-        match self.assign_at_distance(var_loc.index, var_loc.distance, new_value) {
-            Err(LookupFailure::DistanceTooFar) => panic!("tried to assign to a variable at a distance greater than exists: {} index={} distance={}", name, var_loc.index, var_loc.distance),
-            Err(LookupFailure::NotDefined) => Err(()),
-            Ok(()) => Ok(())
-        }
-    }
-
-    // Returns an error result if the key isn't already defined.
-    fn assign_at_distance(&mut self, index: u8, distance: u16, new_value: Value)
-        -> Result<(), LookupFailure>
-    {
-        if distance == 0 {
-            let usize_index = usize::from(index);
-            if usize_index >= self.values.len() {
-                // Not found.
-                return Err(LookupFailure::NotDefined);
+        let mut distance = var_loc.distance;
+        let mut layer_index = env_ref.layer_index();
+        loop {
+            let layer = &mut self.layers[layer_index];
+            if distance == 0 {
+                // Assign at this level.
+                return layer.assign_at(var_loc.index, new_value);
             }
 
-            // Assign at this level.
-            self.values[usize_index] = Some(new_value);
-
-            return Ok(());
-        }
-
-        // TODO: implement this without recursion.
-        match self.enclosing {
-            None => Err(LookupFailure::DistanceTooFar),
-            Some(ref env_cell_rc) => {
-                let mut env = env_cell_rc.deref().borrow_mut();
-
-                env.assign_at_distance(index, distance - 1, new_value)
+            match layer.enclosing_index {
+                None => panic!("tried to assign to a variable at a distance greater than exists: {} var_loc={:?}", name, var_loc),
+                Some(encl_index) => {
+                    layer_index = encl_index;
+                    distance = distance - 1;
+                }
             }
         }
     }
