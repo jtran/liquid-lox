@@ -94,7 +94,7 @@ impl From<&VarLoc> for SlotIndex {
 // Values.
 //
 // EnvironmentRefs use Copy semantics; it is a cheap pointer copy.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
 pub struct EnvironmentRef {
     layer_index: ArenaIndex,
 }
@@ -180,9 +180,9 @@ pub struct EnvironmentManager {
 }
 
 impl EnvironmentManager {
-    pub fn new() -> EnvironmentManager {
+    pub fn with_capacity(capacity: usize) -> EnvironmentManager {
         EnvironmentManager {
-            layers: Arena::new(),
+            layers: Arena::with_capacity(capacity),
         }
     }
 
@@ -202,12 +202,34 @@ impl EnvironmentManager {
         EnvironmentRef { layer_index }
     }
 
-    pub fn new_for_call(&mut self, enclosing: EnvironmentRef) -> EnvironmentRef {
-        self.new_with_parent(enclosing)
-    }
-
     pub fn next_slot_index(&self, env_ref: EnvironmentRef) -> SlotIndex {
         self.layers[env_ref.layer_index()].next_slot_index()
+    }
+
+    pub fn num_layers(&self) -> usize {
+        self.layers.len()
+    }
+
+    pub fn enclosing_env(&self, env_ref: &EnvironmentRef) -> Option<EnvironmentRef> {
+        let layer = &self.layers[env_ref.layer_index()];
+
+        layer.enclosing_index.map(|index| EnvironmentRef { layer_index: index })
+    }
+
+    // Iterate over slots in the single given layer.
+    pub fn layer_slots(&self, env_ref: &EnvironmentRef) -> impl Iterator<Item = &Option<Value>> + '_ {
+        self.layers[env_ref.layer_index()].values.iter()
+    }
+
+    // Iterate over all environment layers for memory recycling.  Order is
+    // unspecified.
+    pub fn env_iter(&mut self) -> impl Iterator<Item = EnvironmentRef> + '_ {
+        self.layers.iter()
+            .map(|(layer_index, _layer)| EnvironmentRef { layer_index })
+    }
+
+    pub fn free(&mut self, env_ref: EnvironmentRef) {
+        self.layers.remove(env_ref.layer_index());
     }
 
     pub fn define_at(&mut self, env_ref: EnvironmentRef, name: &str, slot_index: SlotIndex, value: Value) {

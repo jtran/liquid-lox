@@ -8,6 +8,7 @@ mod environment;
 mod error;
 mod field_table;
 mod interpreter;
+mod memory_recycler;
 mod parser;
 mod resolver;
 mod scanner;

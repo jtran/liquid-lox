@@ -12,7 +12,8 @@ A few notable highlights of this implementation:
 - Arrays
 - Metaclasses
 - Unicode variable names
-- `break` and `continue`
+- Garbage collection
+- Written in 100% safe Rust
 - Free software license
 
 See below for the gory details.
@@ -66,9 +67,10 @@ Like the reference implementation, we skip limit tests that don't apply.
 
 ### Known Issues
 
-- Because the interpreter uses reference counting and doesn't (yet) implement a
-  garbage collector, many input programs create reference cycles and leak
-  memory.
+- The garbage collector is very conservative.  It assumes that anything in scope
+is reachable, even in enclosing scopes.  For example, if you create a closure in
+a deeply nested scope and put it in a data structure, everything in all
+enclosing scopes is not collected.
 
 ## Building
 

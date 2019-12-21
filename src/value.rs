@@ -119,6 +119,14 @@ impl ClassRef {
     pub fn name(&self) -> String {
         self.0.borrow().name.clone()
     }
+
+    pub fn superclass(&self) -> Option<ClassRef> {
+        self.0.borrow().superclass.clone()
+    }
+
+    pub fn to_rc(&self) -> Rc<RefCell<RuntimeClass>> {
+        Rc::clone(&self.0)
+    }
 }
 
 impl PartialEq for ClassRef {
@@ -179,10 +187,20 @@ impl RuntimeClass {
             Some(superclass) => superclass.find_class_method(name),
         }
     }
+
+    // This is for memory recycling.
+    pub fn field_values_iter(&self) -> impl Iterator<Item = &Value> + '_ {
+        self.fields.values()
+    }
+
+    // This is for memory recycling.
+    pub fn method_values_iter(&self) -> impl Iterator<Item = &Value> + '_ {
+        self.methods.values()
+    }
 }
 
 #[derive(Clone, Debug)]
-pub struct InstanceRef(pub Rc<RefCell<Instance>>);
+pub struct InstanceRef(Rc<RefCell<Instance>>);
 
 impl InstanceRef {
     pub fn new(class: ClassRef) -> InstanceRef {
@@ -205,6 +223,10 @@ impl InstanceRef {
 
     pub fn class_name(&self) -> String {
         self.0.borrow().class.name()
+    }
+
+    pub fn to_rc(&self) -> Rc<RefCell<Instance>> {
+        Rc::clone(&self.0)
     }
 }
 
@@ -234,6 +256,11 @@ impl Instance {
 
     pub fn set(&mut self, name: &str, new_value: Value) {
         self.fields.set(name, new_value);
+    }
+
+    // This is for memory recycling.
+    pub fn field_values_iter(&self) -> impl Iterator<Item = &Value> + '_ {
+        self.fields.values()
     }
 }
 

@@ -27,4 +27,8 @@ impl FieldTable {
     pub fn set(&mut self, name: &str, new_value: Value) {
         self.map.insert(name.to_string(), new_value);
     }
+
+    pub fn values(&self) -> impl Iterator<Item = &Value> {
+        self.map.values()
+    }
 }

@@ -7,8 +7,18 @@ use std::time::SystemTime;
 use crate::ast::*;
 use crate::environment::*;
 use crate::field_table::*;
+use crate::memory_recycler::*;
 use crate::source_loc::*;
 use crate::value::*;
+
+// Set this to true to run collection every time we allocate.
+const DEBUG_MEMORY_RECYCLING: bool = false;
+
+// This number is arbitrary and the optimal value really depends on the program
+// being run.
+const MIN_COLLECTION_SIZE: usize = 1024;
+// This must always be >= 1 to make sense.
+const HEAP_GROW_FACTOR: usize = 2;
 
 // This is currently used only for backtrace info when there's a runtime error.
 #[derive(Clone, Debug, PartialEq)]
@@ -21,11 +31,16 @@ pub struct Interpreter {
     env_mgr: EnvironmentManager,
     env: EnvironmentRef,
     frames: Vec<CallFrame>,
+    // Environments that are reachable from the caller's program and could be
+    // used, so they should not be freed for memory recycling.
+    reachable_envs: Vec<EnvironmentRef>,
+    recycler: Box<dyn MemoryRecycler>,
+    next_collection: usize,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        let mut env_mgr = EnvironmentManager::new();
+        let mut env_mgr = EnvironmentManager::with_capacity(64);
         // Note: this behavior must match the Resolver.
         let globals = env_mgr.new_global();
         let mut slot_index = env_mgr.next_slot_index(globals);
@@ -38,11 +53,17 @@ impl Interpreter {
             slot_index = next_index.expect("Interpreter::new(): index for SlotIndex overflowed");
         }
 
+        let mut reachable_envs = Vec::with_capacity(64);
+        reachable_envs.push(globals.clone());
+
         Interpreter {
             env_mgr,
             env: globals,
             frames: Vec::with_capacity(64),
-        }
+            reachable_envs,
+            recycler: Box::new(MarkAndSweepRecycler::with_capacity(64)),
+            next_collection: MIN_COLLECTION_SIZE,
+       }
     }
 
     // The public interface to execute an entire program.
@@ -89,6 +110,7 @@ impl Interpreter {
                                 let new_env = self.new_env_from_current();
                                 let slot_index = self.env_mgr.next_slot_index(new_env);
                                 self.env_mgr.define_at(new_env, "super", slot_index, superclass_val.clone());
+                                self.reachable_envs.push(new_env);
                                 self.env = new_env;
 
                                 Some(class_ref.clone())
@@ -116,6 +138,7 @@ impl Interpreter {
 
                 if superclass.is_some() {
                     self.env = env_before_super;
+                    self.reachable_envs.pop();
                 }
 
                 let metaclass = ClassRef::new(&format!("{} metaclass", class_def.name),
@@ -495,7 +518,13 @@ impl Interpreter {
         -> Result<Value, ExecutionInterrupt>
         where S: AsRef<Stmt>
     {
-        // Create a new environment.
+        // Add the environment as a root for memory recycling.
+        self.reachable_envs.push(env);
+
+        // Do a memory collection if needed.
+        self.maybe_collect_memory();
+
+        // Use the new environment.
         let enclosing = mem::replace(&mut self.env, env);
 
         // Execute statements.
@@ -510,13 +539,16 @@ impl Interpreter {
         // Restore previous environment.
         self.env = enclosing;
 
+        // Environment is no longer a root for memory recycling.
+        self.reachable_envs.pop();
+
         result
     }
 
     // Bind a closure to a value of `this` so that you can call a bound method.
     fn bind_closure(&mut self, closure: &ClosureRef, this_value: Value) -> ClosureRef {
         // Create a new environment.
-        let new_env = self.env_mgr.new_with_parent(*closure.env());
+        let new_env = self.new_env_with_parent(*closure.env());
         let this_slot_index = self.env_mgr.next_slot_index(new_env);
         self.env_mgr.define_at(new_env, "this", this_slot_index, this_value);
 
@@ -613,7 +645,7 @@ impl Interpreter {
                 };
                 self.frames.push(frame);
                 // Create a new environment, enclosed by closure's environment.
-                let new_env = self.env_mgr.new_for_call(closure_ref.env().clone());
+                let new_env = self.new_env_for_call(closure_ref.env().clone());
                 // Bind parameters to argument values.
                 let mut slot_index = self.env_mgr.next_slot_index(new_env);
                 for (parameter, arg) in fun_def.parameters.iter().zip(args) {
@@ -675,7 +707,33 @@ impl Interpreter {
     fn new_env_from_current(&mut self) -> EnvironmentRef {
         // TODO: We should be able to optimize away creating an entire
         // environment since this isn't for a function call.
-        self.env_mgr.new_with_parent(self.env.clone())
+        self.new_env_with_parent(self.env.clone())
+    }
+
+    fn new_env_with_parent(&mut self, enclosing: EnvironmentRef) -> EnvironmentRef {
+        self.env_mgr.new_with_parent(enclosing)
+    }
+
+    fn new_env_for_call(&mut self, enclosing: EnvironmentRef) -> EnvironmentRef {
+        self.new_env_with_parent(enclosing)
+    }
+
+    fn maybe_collect_memory(&mut self) {
+        // Check if we need to collect unreachable memory.
+        let num_layers = self.env_mgr.num_layers();
+        if DEBUG_MEMORY_RECYCLING || num_layers >= self.next_collection {
+            // Run a collection.
+            if DEBUG_MEMORY_RECYCLING {
+                eprintln!("Running collection; num_layers={:?}", num_layers);
+            }
+            self.recycler.collect(&mut self.env_mgr, &self.reachable_envs);
+
+            self.next_collection = num_layers.saturating_mul(HEAP_GROW_FACTOR)
+                                             .max(MIN_COLLECTION_SIZE);
+            if DEBUG_MEMORY_RECYCLING {
+                eprintln!("  Setting next collection to {}", self.next_collection);
+            }
+        }
     }
 
     fn backtrace(&self) -> Backtrace {
