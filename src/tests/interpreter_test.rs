@@ -558,6 +558,20 @@ fn test_interpret_assign_to_global_variable_when_not_resolvable() {
 }
 
 #[test]
+fn test_interpret_assign_to_global_variable_when_not_resolvable_and_not_defined() {
+    // See https://www.craftinginterpreters.com/global-variables.html
+    assert_eq!(interpret("
+        fun changeVariable() {
+            global = \"changed\";
+        }
+
+        changeVariable();
+        global;
+        "), Err(RuntimeError::new(SourceLoc::new(3, 20), "Undefined variable 'global'.",
+                                  backtrace(&[(SourceLoc::new(6, 23), "changeVariable")]))));
+}
+
+#[test]
 fn test_interpret_assign_other_global_variable_when_not_resolvable_is_forward_declared() {
     assert_eq!(interpret("
         fun showVariable() {
