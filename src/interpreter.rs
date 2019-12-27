@@ -529,17 +529,16 @@ impl Interpreter {
                         // When no initializer is defined, instantiating should
                         // take zero arguments.
                         self.check_call_arity(0, args.len(), &loc)?;
+                        return Ok(instance_val);
                     }
                     Some(Value::ClosureVal(closure)) => {
                         self.check_call_arity(closure.arity(), args.len(), &loc)?;
 
-                        let bound_method = closure.bind(instance_val.clone());
-                        self.eval_call(Value::ClosureVal(bound_method), args, loc)?;
+                        let bound_method = closure.bind(instance_val);
+                        return self.eval_call(Value::ClosureVal(bound_method), args, loc);
                     }
                     Some(v) => return Err(RuntimeError::new(loc, &format!("The \"init\" property of a class should be a function, but it isn't: {}", v), self.backtrace())),
                 };
-
-                Ok(instance_val)
             }
             Value::ClosureVal(closure_ref) => {
                 let fun_def = closure_ref.function_definition();
