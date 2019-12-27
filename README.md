@@ -35,15 +35,15 @@ Optional challenges and features implemented:
 
 Custom features not mentioned in the book:
 
-- Unicode variable names
+- Unicode variable names using grapheme clusters, not just code points
 - Arrays
   - literals `[1, 2, 3]`
-  - get `array[index]`
-  - set `array[index] = exp`
-  - `array_create(length, fill_value)`
-  - `array_length(array)`
-  - `array_push(array, item)`
-  - `array_pop(array)`
+  - get `arr[index]`
+  - set `arr[index] = exp`
+  - Native function: `array_create(length, fill_value)`
+  - Native function: `array_length(arr)`
+  - Native function: `array_push(arr, item)`
+  - Native function: `array_pop(arr)`
 
 Features that will probably never be implemented:
 
