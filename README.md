@@ -10,6 +10,7 @@ A few notable highlights of this implementation:
 
 - Passing the reference implementation's test suite
 - Arrays
+- Metaclasses
 - Unicode variable names
 - `break` and `continue`
 - Free software license
