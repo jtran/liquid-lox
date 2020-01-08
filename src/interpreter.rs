@@ -34,6 +34,7 @@ pub struct Interpreter {
     // Environments that are reachable from the caller's program and could be
     // used, so they should not be freed for memory recycling.
     reachable_envs: Vec<EnvironmentRef>,
+    reachable_values: Vec<Value>,
     recycler: Box<dyn MemoryRecycler>,
     next_collection: usize,
 }
@@ -43,13 +44,16 @@ impl Interpreter {
         let mut env_mgr = EnvironmentManager::with_capacity(64);
         // Note: this behavior must match the Resolver.
         let globals = env_mgr.new_global();
+        let mut reachable_values = Vec::with_capacity(64);
         let mut slot_index = env_mgr.next_slot_index(globals);
         for native_id in all_native_ids() {
             let next_index = slot_index.next();
+            let value = Value::NativeFunctionVal(native_id);
+            reachable_values.push(value.clone());
             env_mgr.define_at(globals,
                               &native_id.to_string(),
                               slot_index,
-                              Value::NativeFunctionVal(native_id));
+                              value);
             slot_index = next_index.expect("Interpreter::new(): index for SlotIndex overflowed");
         }
 
@@ -61,6 +65,7 @@ impl Interpreter {
             env: globals,
             frames: Vec::with_capacity(64),
             reachable_envs,
+            reachable_values,
             recycler: Box::new(MarkAndSweepRecycler::with_capacity(64)),
             next_collection: MIN_COLLECTION_SIZE,
        }
