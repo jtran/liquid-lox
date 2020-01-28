@@ -108,6 +108,7 @@ impl Interpreter {
                     None => None,
                     Some(superclass_expr) => {
                         let superclass_val = self.evaluate(superclass_expr)?;
+                        self.reachable_values.push(superclass_val);
 
                         match superclass_val {
                             Value::ClassVal(ref class_ref) => {
@@ -144,6 +145,7 @@ impl Interpreter {
                 if superclass.is_some() {
                     self.env = env_before_super;
                     self.reachable_envs.pop();
+                    self.reachable_values.pop();
                 }
 
                 let metaclass = ClassRef::new(&format!("{} metaclass", class_def.name),
@@ -249,9 +251,10 @@ impl Interpreter {
             }
             Expr::Binary(left, op, right, loc) => {
                 let left_val = self.evaluate(left)?;
+                self.reachable_values.push(left_val.clone());
                 let right_val = self.evaluate(right)?;
 
-                match op {
+                let result = match op {
                     // Math operators.
                     BinaryOperator::Plus => {
                         match (&left_val, &right_val) {
@@ -268,19 +271,19 @@ impl Interpreter {
                             (NumberVal(_), _) => Err(RuntimeError::new(*loc, "Operands must be two numbers or two strings.", self.backtrace())),
                             _ => Err(RuntimeError::new(*loc, "Operands must be two numbers or two strings.", self.backtrace())),
                         }
-                    },
+                    }
                     BinaryOperator::Minus => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(NumberVal(x1 - x2)),
                             _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
-                    },
+                    }
                     BinaryOperator::Multiply => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(NumberVal(x1 * x2)),
                             _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
-                    },
+                    }
                     BinaryOperator::Divide => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => {
@@ -293,7 +296,7 @@ impl Interpreter {
                             }
                             _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
-                    },
+                    }
                     // Comparison operators.
                     BinaryOperator::Equal => Ok(BoolVal(left_val.is_equal(&right_val))),
                     BinaryOperator::NotEqual => Ok(BoolVal(!left_val.is_equal(&right_val))),
@@ -302,35 +305,60 @@ impl Interpreter {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 < x2)),
                             _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
-                    },
+                    }
                     BinaryOperator::LessEqual => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 <= x2)),
                             _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
-                    },
+                    }
                     BinaryOperator::Greater => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 > x2)),
                             _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
-                    },
+                    }
                     BinaryOperator::GreaterEqual => {
                         match (left_val, right_val) {
                             (NumberVal(x1), NumberVal(x2)) => Ok(BoolVal(x1 >= x2)),
                             _ => Err(RuntimeError::new(*loc, "Operands must be numbers.", self.backtrace())),
                         }
-                    },
-                }
+                    }
+                };
+
+                self.reachable_values.pop();
+
+                result
             }
             Expr::Call(callee, arguments, loc) => {
                 let callee_val = self.evaluate(callee)?;
+                self.reachable_values.push(callee_val.clone());
                 let mut arg_vals: Vec<Value> = Vec::with_capacity(arguments.len());
-                for arg_expr in arguments.iter() {
-                    arg_vals.push(self.evaluate(arg_expr)?);
+                for (i, arg_expr) in arguments.iter().enumerate() {
+                    let arg_result = self.evaluate(arg_expr);
+                    match arg_result {
+                        Ok(arg_val) => {
+                            self.reachable_values.push(arg_val.clone());
+                            arg_vals.push(arg_val);
+                        }
+                        Err(_) => {
+                            for _ in 0..i {
+                                self.reachable_values.pop();
+                            }
+                            self.reachable_values.pop();
+                            return arg_result;
+                        }
+                    }
                 }
+                let num_args = arg_vals.len();
 
-                self.eval_call(callee_val, arg_vals, *loc)
+                let result = self.eval_call(callee_val, arg_vals, *loc);
+                for _ in 0..num_args {
+                    self.reachable_values.pop();
+                }
+                self.reachable_values.pop();
+
+                result
             }
             Expr::Function(fun_def) => {
                 let closure = ClosureRef::new(None, Rc::new(fun_def.deref().clone()), self.env.clone());
@@ -339,8 +367,9 @@ impl Interpreter {
             }
             Expr::Get(e, property_name, loc) => {
                 let left_val = self.evaluate(e)?;
+                self.reachable_values.push(left_val.clone());
 
-                match left_val {
+                let result = match left_val {
                     Value::ClassVal(class_ref) => {
                         match self.class_get(&class_ref, property_name) {
                             Some(v) => Ok(v),
@@ -354,12 +383,17 @@ impl Interpreter {
                         }
                     }
                     _ => Err(RuntimeError::new(*loc, "Only instances have properties.", self.backtrace())),
-                }
+                };
+
+                self.reachable_values.pop();
+
+                result
             }
             Expr::GetIndex(e, index_expr, loc) => {
                 let left_val = self.evaluate(e)?;
+                self.reachable_values.push(left_val.clone());
 
-                match left_val {
+                let result = match left_val {
                     Value::ArrayVal(vec) => {
                         let index_val = self.evaluate(index_expr)?;
 
@@ -381,7 +415,11 @@ impl Interpreter {
                         }
                     }
                     _ => Err(RuntimeError::new(*loc, "Only arrays can be indexed.", self.backtrace()))
-                }
+                };
+
+                self.reachable_values.pop();
+
+                result
             }
             Expr::Grouping(e) => self.evaluate(e),
             Expr::LiteralArray(elements) => {
