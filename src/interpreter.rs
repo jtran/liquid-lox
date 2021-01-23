@@ -108,7 +108,7 @@ impl Interpreter {
                     None => None,
                     Some(superclass_expr) => {
                         let superclass_val = self.evaluate(superclass_expr)?;
-                        self.reachable_values.push(superclass_val);
+                        self.reachable_values.push(superclass_val.clone());
 
                         match superclass_val {
                             Value::ClassVal(ref class_ref) => {
@@ -331,6 +331,7 @@ impl Interpreter {
                 result
             }
             Expr::Call(callee, arguments, loc) => {
+                let call_start = self.reachable_values.len();
                 let callee_val = self.evaluate(callee)?;
                 self.reachable_values.push(callee_val.clone());
                 let mut arg_vals: Vec<Value> = Vec::with_capacity(arguments.len());
@@ -342,21 +343,16 @@ impl Interpreter {
                             arg_vals.push(arg_val);
                         }
                         Err(_) => {
-                            for _ in 0..i {
-                                self.reachable_values.pop();
-                            }
-                            self.reachable_values.pop();
+                            assert!(self.reachable_values.len() == call_start + 1 + i);
+                            self.reachable_values.truncate(call_start);
                             return arg_result;
                         }
                     }
                 }
-                let num_args = arg_vals.len();
 
-                let result = self.eval_call(callee_val, arg_vals, *loc);
-                for _ in 0..num_args {
-                    self.reachable_values.pop();
-                }
-                self.reachable_values.pop();
+                let result = self.eval_call(callee_val, call_start + 1, *loc);
+                assert!(self.reachable_values.len() == call_start + 1 + arguments.len());
+                self.reachable_values.truncate(call_start);
 
                 result
             }
@@ -647,14 +643,16 @@ impl Interpreter {
         }
     }
 
-    fn eval_call(&mut self, callee: Value, args: Vec<Value>, loc: SourceLoc)
+    fn eval_call(&mut self, callee: Value, args_start: usize, loc: SourceLoc)
         -> Result<Value, RuntimeError>
     {
+        let args_len = self.reachable_values.len() - args_start;
         match callee {
             Value::NativeFunctionVal(id) => {
                 let native_function = NativeFunction::new(id);
-                self.check_call_arity(native_function.arity(), args.len(), &loc)?;
+                self.check_call_arity(native_function.arity(), args_len, &loc)?;
 
+                let args = &self.reachable_values[args_start..];
                 native_function.call(args, loc)
                     .map_err(|e| RuntimeError::from_native_error(e, self.backtrace()))
             }
@@ -666,21 +664,21 @@ impl Interpreter {
                     None => {
                         // When no initializer is defined, instantiating should
                         // take zero arguments.
-                        self.check_call_arity(0, args.len(), &loc)?;
+                        self.check_call_arity(0, args_len, &loc)?;
                         return Ok(instance_val);
                     }
                     Some(Value::ClosureVal(closure)) => {
-                        self.check_call_arity(closure.arity(), args.len(), &loc)?;
+                        self.check_call_arity(closure.arity(), args_len, &loc)?;
 
                         let bound_method = self.bind_closure(&closure, instance_val);
-                        return self.eval_call(Value::ClosureVal(bound_method), args, loc);
+                        return self.eval_call(Value::ClosureVal(bound_method), args_start, loc);
                     }
                     Some(v) => return Err(RuntimeError::new(loc, &format!("The \"init\" property of a class should be a function, but it isn't: {}", v), self.backtrace())),
                 };
             }
             Value::ClosureVal(closure_ref) => {
                 let fun_def = closure_ref.function_definition();
-                self.check_call_arity(fun_def.parameters.len(), args.len(), &loc)?;
+                self.check_call_arity(fun_def.parameters.len(), args_len, &loc)?;
                 // Create call frame.
                 let frame = CallFrame {
                     closure_ref: closure_ref.clone(),
@@ -690,10 +688,11 @@ impl Interpreter {
                 // Create a new environment, enclosed by closure's environment.
                 let new_env = self.new_env_for_call(closure_ref.env().clone());
                 // Bind parameters to argument values.
+                let args = &self.reachable_values[args_start..];
                 let mut slot_index = self.env_mgr.next_slot_index(new_env);
                 for (parameter, arg) in fun_def.parameters.iter().zip(args) {
                     let next_index = slot_index.next();
-                    self.env_mgr.define_at(new_env, &parameter.name, slot_index, arg);
+                    self.env_mgr.define_at(new_env, &parameter.name, slot_index, arg.clone());
                     slot_index = next_index.expect("eval_call: index for SlotIndex overflowed");
                 }
                 // Execute function body in new environment.
@@ -811,7 +810,7 @@ impl NativeFunction {
         }
     }
 
-    pub fn call(&self, args: Vec<Value>, loc: SourceLoc) -> Result<Value, NativeRuntimeError> {
+    pub fn call(&self, args: &[Value], loc: SourceLoc) -> Result<Value, NativeRuntimeError> {
         match self.id {
             NativeFunctionId::Clock => {
                 const MILLIS_PER_SEC: u64 = 1000;
