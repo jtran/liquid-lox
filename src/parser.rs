@@ -226,7 +226,7 @@ impl<'a> Parser<'a> {
             Some((TokenType::For, _)) => self.finish_for_statement(),
             Some((TokenType::If, _)) => self.finish_if_statement(),
             Some((TokenType::LeftBrace, _)) => {
-                self.finish_block().map(|statements| Stmt::Block(statements))
+                self.finish_block().map(Stmt::Block)
             }
             Some((TokenType::Print, _)) => self.finish_print_statement(),
             Some((TokenType::Return, loc)) => self.finish_return_statement(loc),
@@ -819,7 +819,6 @@ impl<'a> Parser<'a> {
         }
     }
 
-    #[must_use]
     fn consume(&mut self, token_type: TokenType, error_message: &str)
         -> Result<(), ParseErrorCause>
     {

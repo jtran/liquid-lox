@@ -194,16 +194,12 @@ impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
     // This is looking ahead 2 characters.
     fn peek_next_grapheme(&mut self) -> Option<&'g str> {
         match self.grapheme_indices.peek() {
-            None => return None,
+            None => None,
             Some(_) => {
                 let mut cloned = self.grapheme_indices.clone();
                 cloned.next();
-                match cloned.peek() {
-                    None => return None,
-                    Some((_, grapheme_cluster)) => {
-                        return Some(grapheme_cluster)
-                    }
-                }
+
+                cloned.peek().map(|(_, grapheme_cluster)| *grapheme_cluster)
             }
         }
     }
@@ -375,10 +371,7 @@ impl<'source, 'g> Scanner<'source, 'g> where 'source: 'g {
 fn is_digit(grapheme: &str) -> bool {
     // Note: built-in is_numeric() uses a more complicated unicode definition of
     // numeric.
-    match grapheme {
-        "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" => true,
-        _ => false,
-    }
+    matches!(grapheme, "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9")
 }
 
 fn is_alphabetic(grapheme: &str) -> bool {

@@ -64,7 +64,7 @@ impl Value {
                                         .join(", ")),
             BoolVal(true) => "true".into(),
             BoolVal(false) => "false".into(),
-            ClassVal(class_ref) => class_ref.name().to_string(),
+            ClassVal(class_ref) => class_ref.name(),
             ClosureVal(closure) => {
                 match closure.name() {
                     Some(name) => format!("<fn {}>", name),
@@ -467,7 +467,7 @@ impl BacktraceItem {
     pub fn new(function_name: String, source_loc: SourceLoc) -> BacktraceItem {
         BacktraceItem {
             function_name,
-            source_loc: source_loc,
+            source_loc,
         }
     }
 }

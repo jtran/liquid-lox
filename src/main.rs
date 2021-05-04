@@ -107,7 +107,7 @@ fn run(interpreter: &mut Interpreter, source: String, for_repl: bool)
     else {
         parser::parse(&source)
     }?;
-    let code = resolver::resolve(ast).map_err(|e| ParseError::from(e))?;
+    let code = resolver::resolve(ast)?;
     let result = interpreter.interpret(&code);
 
     result.map_err(|err| err.into())
