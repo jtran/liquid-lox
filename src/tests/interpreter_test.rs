@@ -171,8 +171,9 @@ fn test_interpret_array_create() {
     assert_eq!(interpret("array_create(0, nil) == [];"), Ok(BoolVal(true)));
     assert_eq!(interpret("var a = array_create(2, 3); a[1];"), Ok(NumberVal(3.0)));
     assert_eq!(interpret("var a = array_create(2, 3); array_length(a);"), Ok(NumberVal(2.0)));
+    assert_eq!(interpret("var a = array_create(0.5, 1); array_length(a);"), Ok(NumberVal(0.0)));
     assert_eq!(interpret("array_create(nil, 1);"), Err(RuntimeError::new(SourceLoc::new(1, 13), "Array create expects number and value.", script_backtrace())));
-    assert_eq!(interpret("array_create(0.5, 1);"), Err(RuntimeError::new(SourceLoc::new(1, 13), "Array length must be a non-negative integer.", script_backtrace())));
+    assert_eq!(interpret("array_create(-0.5, 1);"), Err(RuntimeError::new(SourceLoc::new(1, 13), "Array length must be non-negative.", script_backtrace())));
 }
 
 #[test]

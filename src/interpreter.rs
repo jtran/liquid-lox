@@ -333,8 +333,8 @@ impl Interpreter {
 
                         match index_val {
                             Value::NumberVal(x) => {
-                                let truncated_x = x.trunc();
-                                if x == truncated_x && x >= 0.0 {
+                                if x >= 0.0 {
+                                    let truncated_x = x.trunc();
                                     let index = truncated_x as usize;
 
                                     match vec.borrow().get(index) {
@@ -410,8 +410,8 @@ impl Interpreter {
                         let index_val = self.evaluate(index)?;
                         match index_val {
                             Value::NumberVal(x) => {
-                                let truncated_x = x.trunc();
-                                if x == truncated_x && x >= 0.0 {
+                                if x >= 0.0 {
+                                    let truncated_x = x.trunc();
                                     let index = truncated_x as usize;
                                     let value = self.evaluate(rhs)?;
 
@@ -667,15 +667,15 @@ impl NativeFunction {
             NativeFunctionId::ArrayCreate => {
                 match &args[0] {
                     Value::NumberVal(x) => {
-                        let truncated_x = x.trunc();
-                        if *x == truncated_x && *x >= 0.0 {
+                        if *x >= 0.0 {
+                            let truncated_x = x.trunc();
                             let length = truncated_x as usize;
                             let mut vec = Vec::with_capacity(length);
                             vec.resize(length, args[1].clone());
 
                             Ok(Value::ArrayVal(Rc::new(RefCell::new(vec))))
                         } else {
-                            Err(NativeRuntimeError::new(loc, "Array length must be a non-negative integer."))
+                            Err(NativeRuntimeError::new(loc, "Array length must be non-negative."))
                         }
                     }
                     _ => Err(NativeRuntimeError::new(loc, "Array create expects number and value.")),
