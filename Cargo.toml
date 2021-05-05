@@ -5,6 +5,9 @@ authors = ["Jonathan Tran <jonnytran@gmail.com>"]
 edition = "2018"
 resolver = "2"
 
+[features]
+debug-trace-execution = []
+
 [dependencies]
 argparse = "0.2.2"
 fnv = "1.0.6"

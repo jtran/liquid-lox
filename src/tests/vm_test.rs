@@ -8,8 +8,10 @@ use crate::value::Value::*;
 use crate::vm::*;
 
 fn eval(code: Vec<u8>, constants: Vec<Value>) -> Result<Value, RuntimeError> {
-    let mut chunk = Chunk::new(code, constants);
-    chunk.add_code_op(Return);
+    // Put everything on line 1.
+    let lines = vec![1; code.len()];
+    let mut chunk = Chunk::new(code, constants, lines);
+    chunk.add_code_op(Return, 2);
     let mut vm = Vm::new();
 
     vm.interpret_chunk(&chunk)

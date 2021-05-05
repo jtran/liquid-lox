@@ -49,6 +49,9 @@ impl<'chunk> Vm<'chunk> {
         let frames_len = self.frames.len();
         let mut frame = &mut self.frames[frames_len - 1];
         loop {
+            #[cfg(feature = "debug-trace-execution")]
+            frame.chunk.disassemble_instruction(frame.ip);
+
             let op = frame.get_op(frame.ip).unwrap_or_else(||
                 panic!("unknown op code: {:?}", frame.code_byte(frame.ip))
             );
@@ -132,12 +135,12 @@ impl<'chunk> CallFrame<'chunk> {
         self.ip += 1;
     }
 
-    pub fn get_op(&self, ip: usize) -> Option<Op> {
-        self.chunk.get_op_code(ip)
+    pub fn get_op(&self, index: usize) -> Option<Op> {
+        self.chunk.get_op_code(index)
     }
 
-    pub fn code_byte(&self, ip: usize) -> u8 {
-        self.chunk.code_byte(ip)
+    pub fn code_byte(&self, index: usize) -> u8 {
+        self.chunk.code_byte(index)
     }
 
     pub fn constant(&self, index: usize) -> Value {
