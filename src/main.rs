@@ -1,7 +1,3 @@
-#[macro_use]
-extern crate lazy_static;
-extern crate unicode_segmentation;
-
 mod ast;
 mod environment;
 mod error;

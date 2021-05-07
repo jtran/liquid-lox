@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::iter::Peekable;
 use std::mem;
 
+use lazy_static::lazy_static;
 use unicode_segmentation::{GraphemeIndices, UnicodeSegmentation};
 
 use crate::error::*;
