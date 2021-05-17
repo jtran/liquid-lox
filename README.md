@@ -15,11 +15,14 @@ A few notable highlights of this implementation:
 - `break` and `continue`
 - Free software license
 
+A second entire implementation using a byte-code virtual machine is under
+development.
+
 See below for the gory details.
 
 ### Differences from the Reference Implementation
 
-Optional challenges and features implemented:
+Optional challenges and features implemented in the tree-walking interpreter:
 
 - Pass the reference implementation's test suite (see status for exact counts)
 - Column number of source, in addition to line number, is displayed in error
@@ -44,10 +47,6 @@ Custom features not mentioned in the book:
   - Native function: `array_length(arr)`
   - Native function: `array_push(arr, item)`
   - Native function: `array_pop(arr)`
-
-Features that will probably never be implemented:
-
-- Better runtime performance by using a bytecode virtual machine
 
 ### Reference Tests
 
@@ -90,6 +89,12 @@ Run a Lox REPL:
 
 ```shell
 lox
+```
+
+To use the byte-code virtual machine, which is still a work-in-progress, use:
+
+```shell
+lox --vm
 ```
 
 ## Running Tests

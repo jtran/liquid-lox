@@ -11,6 +11,8 @@ pub enum Op {
     Multiply,
     Divide,
 
+    Negate,
+
     Print,
 
     Return,
@@ -24,6 +26,7 @@ pub struct Chunk {
 }
 
 impl Chunk {
+    #[allow(dead_code)]
     pub fn new(code: Vec<u8>, constants: Vec<Value>, lines: Vec<u32>) -> Chunk {
         Chunk {
             code,
@@ -39,13 +42,11 @@ impl Chunk {
         self.lines.push(line);
     }
 
-    #[allow(dead_code)]
     pub fn add_code(&mut self, byte: u8, line: u32) {
         self.code.push(byte);
         self.lines.push(line);
     }
 
-    #[allow(dead_code)]
     pub fn add_constant(&mut self, constant: Value) -> usize {
         let index = self.constants.len();
         self.constants.push(constant);
@@ -96,6 +97,7 @@ impl Chunk {
             Some(op @ Op::Subtract) |
             Some(op @ Op::Multiply) |
             Some(op @ Op::Divide) |
+            Some(op @ Op::Negate) |
             Some(op @ Op::Print) |
             Some(op @ Op::Return) => self.simple_instruction(op, offset),
         }
@@ -128,6 +130,7 @@ impl std::fmt::Display for Op {
             Subtract => write!(f, "OP_SUBTRACT"),
             Multiply => write!(f, "OP_MULTIPLY"),
             Divide => write!(f, "OP_DIVIDE"),
+            Negate => write!(f, "OP_NEGATE"),
             Print => write!(f, "OP_PRINT"),
             Return => write!(f, "OP_RETURN"),
         }

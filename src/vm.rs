@@ -1,21 +1,26 @@
+use std::ops::{Add, Div, Mul, Sub};
+use std::rc::Rc;
+
+use crate::compiler::U8_COUNT;
 use crate::RuntimeError;
 use crate::op::{Chunk, Op};
 use crate::value::Value;
 
 const FRAMES_MAX: usize = 64;
 
-const U8_COUNT: usize = std::u8::MAX as usize + 1;
 const STACK_MAX: usize = FRAMES_MAX * U8_COUNT;
 
 #[derive(Debug)]
-pub struct Vm<'chunk> {
-    frames: Vec<CallFrame<'chunk>>,
+pub struct Vm {
+    frames: Vec<CallFrame>,
     stack: Vec<Value>,
 }
 
+type ChunkRef = Rc<Chunk>;
+
 #[derive(Debug)]
-pub struct CallFrame<'chunk> {
-    chunk: &'chunk Chunk,
+pub struct CallFrame {
+    chunk: ChunkRef,
     ip: usize,
     slots: Vec<Value>,
 }
@@ -30,15 +35,29 @@ macro_rules! pop {
     };
 }
 
-impl<'chunk> Vm<'chunk> {
-    pub fn new() -> Vm<'chunk> {
+// Binary op for numeric operations.
+macro_rules! number_bin_op {
+    ( $self:expr, $op:ident, $op_str:expr, $op_name:expr ) => {
+        let y = pop!($self);
+        let x = pop!($self);
+        match (x, y) {
+            (Value::NumberVal(x), Value::NumberVal(y)) => {
+                $self.stack.push(Value::NumberVal(x.$op(y)));
+            }
+            (x, y) => panic!("Wrong type for {} op: {:?} {} {:?}", $op_name, x, $op_str, y),
+        }
+    };
+}
+
+impl Vm {
+    pub fn new() -> Vm {
         Vm {
             frames: Vec::with_capacity(FRAMES_MAX),
             stack: Vec::with_capacity(STACK_MAX),
         }
     }
 
-    pub fn interpret_chunk(&mut self, chunk: &'chunk Chunk) -> Result<Value, RuntimeError> {
+    pub fn interpret_chunk(&mut self, chunk: ChunkRef) -> Result<Value, RuntimeError> {
         // Our one and only call frame for now.
         self.frames.push(CallFrame::new(chunk));
 
@@ -62,45 +81,26 @@ impl<'chunk> Vm<'chunk> {
                     frame.inc_ip();
                 },
                 Op::Add => {
-                    let y = pop!(self);
-                    let x = pop!(self);
-                    match (x, y) {
-                        (Value::NumberVal(x), Value::NumberVal(y)) => {
-                            self.stack.push(Value::NumberVal(x + y));
-                        }
-                        (x, y) => panic!("Wrong type for plus op: {:?} + {:?}", x, y),
-                    }
+                    number_bin_op!(self, add, "+", "plus");
                 },
                 Op::Subtract => {
-                    let y = pop!(self);
-                    let x = pop!(self);
-                    match (x, y) {
-                        (Value::NumberVal(x), Value::NumberVal(y)) => {
-                            self.stack.push(Value::NumberVal(x - y));
-                        }
-                        (x, y) => panic!("Wrong type for minus op: {:?} - {:?}", x, y),
-                    }
+                    number_bin_op!(self, sub, "-", "minus");
                 },
                 Op::Multiply => {
-                    let y = pop!(self);
-                    let x = pop!(self);
-                    match (x, y) {
-                        (Value::NumberVal(x), Value::NumberVal(y)) => {
-                            self.stack.push(Value::NumberVal(x * y));
-                        }
-                        (x, y) => panic!("Wrong type for multiply op: {:?} * {:?}", x, y),
-                    }
+                    number_bin_op!(self, mul, "*", "multiply");
                 },
                 Op::Divide => {
-                    let y = pop!(self);
-                    let x = pop!(self);
-                    match (x, y) {
-                        (Value::NumberVal(x), Value::NumberVal(y)) => {
-                            self.stack.push(Value::NumberVal(x / y));
-                        }
-                        (x, y) => panic!("Wrong type for divide op: {:?} / {:?}", x, y),
-                    }
+                    number_bin_op!(self, div, "/", "divide");
                 },
+                Op::Negate => {
+                    let x = pop!(self);
+                    match x {
+                        Value::NumberVal(x) => {
+                            self.stack.push(Value::NumberVal(-x));
+                        }
+                        _ => panic!("Wrong type for negate op: -{:?}", x),
+                    }
+                }
                 Op::Print => {
                     print_value(pop!(self));
                 },
@@ -116,10 +116,10 @@ fn print_value(value: Value) {
     println!("{}", value.to_runtime_string());
 }
 
-impl<'chunk> CallFrame<'chunk> {
-    pub fn new(chunk: &'chunk Chunk) -> CallFrame<'chunk> {
+impl CallFrame {
+    pub fn new(chunk: ChunkRef) -> CallFrame {
         CallFrame {
-            chunk: chunk,
+            chunk,
             ip: 0,
             slots: Vec::default(),
         }
