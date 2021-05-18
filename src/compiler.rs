@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::convert::TryFrom;
 
 use num_traits::{FromPrimitive, ToPrimitive};
@@ -53,6 +52,7 @@ struct Parser<'a> {
     previous: usize,
     had_error: bool,
     panic_mode: bool,
+    errors: Vec<ParseErrorCause>,
 }
 
 impl Precedence {
@@ -134,7 +134,7 @@ impl Compiler {
         }
 
         if parser.had_error {
-            return Err(ParseError::new(vec![ParseErrorCause::new(SourceLoc::default(), "There were errors already output.")]));
+            return Err(ParseError::new(parser.take_errors()));
         }
 
         Ok(chunk)
@@ -264,6 +264,7 @@ impl<'a> Parser<'a> {
             previous: 0,
             had_error: false,
             panic_mode: false,
+            errors: Vec::new(),
         }
     }
 
@@ -288,6 +289,10 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn take_errors(&mut self) -> Vec<ParseErrorCause> {
+        self.errors.drain(..).collect()
+    }
+
     fn error_from_last(&mut self, message: &str) {
         self.error_at(self.previous, message);
     }
@@ -301,13 +306,11 @@ impl<'a> Parser<'a> {
             return;
         }
         self.panic_mode = true;
+        self.had_error = true;
 
         let token = &self.tokens[token_index];
-        let col_str = match token.token_type {
-            TokenType::Eof => Cow::Borrowed("end"),
-            _ => Cow::Owned(token.column.to_string()),
-        };
-        eprintln!("[line {}] Error at {}: {}", token.line, col_str.as_ref(), message);
-        self.had_error = true;
+        self.errors.push(ParseErrorCause::new_with_location(SourceLoc::new(token.line, token.column),
+                                                            token.lexeme,
+                                                            message))
     }
 }

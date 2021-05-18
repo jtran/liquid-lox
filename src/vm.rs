@@ -2,9 +2,9 @@ use std::ops::{Add, Div, Mul, Sub};
 use std::rc::Rc;
 
 use crate::compiler::U8_COUNT;
-use crate::RuntimeError;
 use crate::op::{Chunk, Op};
-use crate::value::Value;
+use crate::source_loc::*;
+use crate::value::{Backtrace, RuntimeError, Value};
 
 const FRAMES_MAX: usize = 64;
 
@@ -30,8 +30,8 @@ pub struct CallFrame {
 // through a function call.  It treats the entire self as borrowed.  But when
 // it's inline, the specific fields are transparent.
 macro_rules! pop {
-    ( $x:expr ) => {
-        $x.stack.pop().expect("popped past the end of the stack")
+    ( $self:expr ) => {
+        $self.stack.pop().expect("popped past the end of the stack")
     };
 }
 
@@ -68,11 +68,13 @@ impl Vm {
         let frames_len = self.frames.len();
         let mut frame = &mut self.frames[frames_len - 1];
         loop {
-            #[cfg(feature = "debug-trace-execution")]
-            frame.chunk.disassemble_instruction(frame.ip);
+            let cur_op_index = frame.ip;
 
-            let op = frame.get_op(frame.ip).unwrap_or_else(||
-                panic!("unknown op code: {:?}", frame.code_byte(frame.ip))
+            #[cfg(feature = "debug-trace-execution")]
+            frame.chunk.disassemble_instruction(cur_op_index);
+
+            let op = frame.get_op(cur_op_index).unwrap_or_else(||
+                panic!("unknown op code: {:?}", frame.code_byte(cur_op_index))
             );
             frame.ip += 1;
             match op {
@@ -93,12 +95,17 @@ impl Vm {
                     number_bin_op!(self, div, "/", "divide");
                 },
                 Op::Negate => {
-                    let x = pop!(self);
-                    match x {
+                    match pop!(self) {
                         Value::NumberVal(x) => {
                             self.stack.push(Value::NumberVal(-x));
                         }
-                        _ => panic!("Wrong type for negate op: -{:?}", x),
+                        val => {
+                            self.stack.push(val);
+                            return Err(RuntimeError::new(SourceLoc::new(
+                                frame.chunk.line(cur_op_index), 0),
+                                "Operand must be a number.",
+                                self.backtrace()));
+                        }
                     }
                 }
                 Op::Print => {
@@ -109,6 +116,11 @@ impl Vm {
                 }
             }
         }
+    }
+
+    fn backtrace(&self) -> Backtrace {
+        // TODO
+        Backtrace::new(Vec::new())
     }
 }
 

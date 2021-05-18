@@ -66,6 +66,10 @@ impl Chunk {
         self.constants[index].clone()
     }
 
+    pub fn line(&self, index: usize) -> u32 {
+        self.lines[index]
+    }
+
     #[allow(dead_code)]
     pub fn disassemble(&self, name: &str) {
         println!("== {} ==", name);
