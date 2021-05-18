@@ -82,6 +82,15 @@ impl Vm {
                     self.stack.push(frame.constant(usize::from(frame.peek_byte())));
                     frame.inc_ip();
                 },
+                Op::Nil => {
+                    self.stack.push(Value::NilVal);
+                },
+                Op::True => {
+                    self.stack.push(Value::BoolVal(true));
+                },
+                Op::False => {
+                    self.stack.push(Value::BoolVal(false));
+                },
                 Op::Add => {
                     number_bin_op!(self, add, "+", "plus");
                 },

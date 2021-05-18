@@ -178,6 +178,9 @@ impl Compiler {
             TokenType::LeftParen => self.grouping(parser, chunk),
             TokenType::Minus => self.unary(parser, chunk),
             TokenType::Number => self.number(parser, chunk),
+            TokenType::False => self.literal(parser, chunk),
+            TokenType::Nil => self.literal(parser, chunk),
+            TokenType::True => self.literal(parser, chunk),
             _ => {
                 parser.error_from_last("Expect expression.");
                 return;
@@ -219,6 +222,15 @@ impl Compiler {
             TokenType::Minus => self.emit_op(parser, Op::Subtract, chunk),
             TokenType::Star => self.emit_op(parser, Op::Multiply, chunk),
             TokenType::Slash => self.emit_op(parser, Op::Divide, chunk),
+            _ => unreachable!(),
+        }
+    }
+
+    fn literal(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        match parser.previous_token().token_type {
+            TokenType::False => self.emit_op(parser, Op::False, chunk),
+            TokenType::Nil => self.emit_op(parser, Op::Nil, chunk),
+            TokenType::True => self.emit_op(parser, Op::True, chunk),
             _ => unreachable!(),
         }
     }

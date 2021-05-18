@@ -5,6 +5,9 @@ use crate::Value;
 #[derive(Debug, Copy, Clone, FromPrimitive, ToPrimitive)]
 pub enum Op {
     Constant,
+    Nil,
+    True,
+    False,
 
     Add,
     Subtract,
@@ -97,6 +100,9 @@ impl Chunk {
                 offset + 1
             }
             Some(op @ Op::Constant) => self.constant_instruction(op, offset),
+            Some(op @ Op::Nil) |
+            Some(op @ Op::True) |
+            Some(op @ Op::False) |
             Some(op @ Op::Add) |
             Some(op @ Op::Subtract) |
             Some(op @ Op::Multiply) |
@@ -130,6 +136,9 @@ impl std::fmt::Display for Op {
         use self::Op::*;
         match self {
             Constant => write!(f, "OP_CONSTANT"),
+            Nil => write!(f, "OP_NIL"),
+            True => write!(f, "OP_TRUE"),
+            False => write!(f, "OP_FALSE"),
             Add => write!(f, "OP_ADD"),
             Subtract => write!(f, "OP_SUBTRACT"),
             Multiply => write!(f, "OP_MULTIPLY"),
