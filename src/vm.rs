@@ -116,6 +116,10 @@ impl Vm {
                 Op::Divide => {
                     number_bin_op!(self, frame, cur_op_index, div);
                 }
+                Op::Not => {
+                    let v = pop!(self);
+                    self.stack.push(Value::BoolVal(!v.is_truthy()));
+                }
                 Op::Negate => {
                     match pop!(self) {
                         Value::NumberVal(x) => {

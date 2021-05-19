@@ -177,6 +177,7 @@ impl Compiler {
         match parser.previous_token().token_type {
             TokenType::LeftParen => self.grouping(parser, chunk),
             TokenType::Minus => self.unary(parser, chunk),
+            TokenType::Bang => self.unary(parser, chunk),
             TokenType::Number => self.number(parser, chunk),
             TokenType::False => self.literal(parser, chunk),
             TokenType::Nil => self.literal(parser, chunk),
@@ -255,9 +256,8 @@ impl Compiler {
         // TODO: Use the line of the token when emitting.  The reference
         // implementation does it this way for simplicity.
         match op_type {
-            TokenType::Minus => {
-                self.emit_op(parser, Op::Negate, chunk);
-            }
+            TokenType::Minus => self.emit_op(parser, Op::Negate, chunk),
+            TokenType::Bang => self.emit_op(parser, Op::Not, chunk),
             _ => unreachable!(),
         }
     }

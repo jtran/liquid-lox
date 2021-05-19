@@ -106,6 +106,10 @@ fn test_eval_binary_ops() {
 
 #[test]
 fn test_eval_unary_ops() {
+    assert_eq!(eval("!true"), Ok(BoolVal(false)));
+    assert_eq!(eval("!false"), Ok(BoolVal(true)));
+    assert_eq!(eval("!nil"), Ok(BoolVal(true)));
+    assert_eq!(eval("!0"), Ok(BoolVal(false)));
     assert_eq!(eval("-(2)"), Ok(NumberVal(-2.0)));
     assert_eq!(eval("-true"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Operand must be a number.", script_backtrace())));
 }

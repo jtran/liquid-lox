@@ -14,6 +14,7 @@ pub enum Op {
     Multiply,
     Divide,
 
+    Not,
     Negate,
 
     Print,
@@ -107,6 +108,7 @@ impl Chunk {
             Some(op @ Op::Subtract) |
             Some(op @ Op::Multiply) |
             Some(op @ Op::Divide) |
+            Some(op @ Op::Not) |
             Some(op @ Op::Negate) |
             Some(op @ Op::Print) |
             Some(op @ Op::Return) => self.simple_instruction(op, offset),
@@ -143,6 +145,7 @@ impl std::fmt::Display for Op {
             Subtract => write!(f, "OP_SUBTRACT"),
             Multiply => write!(f, "OP_MULTIPLY"),
             Divide => write!(f, "OP_DIVIDE"),
+            Not => write!(f, "OP_NOT"),
             Negate => write!(f, "OP_NEGATE"),
             Print => write!(f, "OP_PRINT"),
             Return => write!(f, "OP_RETURN"),
