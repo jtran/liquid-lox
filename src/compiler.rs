@@ -1,4 +1,5 @@
 use std::convert::TryFrom;
+use std::rc::Rc;
 
 use num_traits::{FromPrimitive, ToPrimitive};
 use num_derive::{FromPrimitive, ToPrimitive};
@@ -184,6 +185,7 @@ impl Compiler {
             TokenType::LeftParen => self.grouping(parser, chunk),
             TokenType::Minus => self.unary(parser, chunk),
             TokenType::Bang => self.unary(parser, chunk),
+            TokenType::String => self.string(parser, chunk),
             TokenType::Number => self.number(parser, chunk),
             TokenType::False => self.literal(parser, chunk),
             TokenType::Nil => self.literal(parser, chunk),
@@ -267,6 +269,18 @@ impl Compiler {
             }
             Some(value) => {
                 self.emit_constant(parser, Value::NumberVal(value), chunk);
+            }
+        }
+    }
+
+    fn string(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        match parser.previous_token().string_literal {
+            None => {
+                panic!("Expected string literal on token; found {:?}", parser.previous_token());
+            }
+            Some(string) => {
+                let value = Value::StringVal(Rc::new(string.to_owned()));
+                self.emit_constant(parser, value, chunk);
             }
         }
     }

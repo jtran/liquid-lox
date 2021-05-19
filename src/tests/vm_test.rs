@@ -90,6 +90,7 @@ fn test_eval_literals() {
     assert_eq!(eval("true"), Ok(BoolVal(true)));
     assert_eq!(eval("false"), Ok(BoolVal(false)));
     assert_eq!(eval("42"), Ok(NumberVal(42.0)));
+    assert_eq!(eval("\"hello\""), Ok(StringVal(Rc::new("hello".to_string()))));
 }
 
 #[test]
@@ -114,6 +115,10 @@ fn test_eval_comparison() {
     assert_eq!(eval("nil != nil"), Ok(BoolVal(false)));
     assert_eq!(eval("nil == false"), Ok(BoolVal(false)));
     assert_eq!(eval("nil != false"), Ok(BoolVal(true)));
+    assert_eq!(eval("\"foo\" == \"foo\""), Ok(BoolVal(true)));
+    assert_eq!(eval("\"foo\" != \"foo\""), Ok(BoolVal(false)));
+    assert_eq!(eval("\"foo\" == \"bar\""), Ok(BoolVal(false)));
+    assert_eq!(eval("\"foo\" != \"bar\""), Ok(BoolVal(true)));
     assert_eq!(eval("2 < 3"), Ok(BoolVal(true)));
     assert_eq!(eval("2 > 3"), Ok(BoolVal(false)));
     assert_eq!(eval("2 <= 3"), Ok(BoolVal(true)));
@@ -130,6 +135,7 @@ fn test_eval_unary_ops() {
     assert_eq!(eval("!false"), Ok(BoolVal(true)));
     assert_eq!(eval("!nil"), Ok(BoolVal(true)));
     assert_eq!(eval("!0"), Ok(BoolVal(false)));
+    assert_eq!(eval("!\"\""), Ok(BoolVal(false)));
     assert_eq!(eval("-(2)"), Ok(NumberVal(-2.0)));
     assert_eq!(eval("-true"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Operand must be a number.", script_backtrace())));
 }
