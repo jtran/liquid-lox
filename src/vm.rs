@@ -68,7 +68,13 @@ impl Vm {
         // Our one and only call frame for now.
         self.frames.push(CallFrame::new(chunk));
 
-        self.run()
+        let result = self.run();
+
+        if result.is_err() {
+            self.reset_stack();
+        }
+
+        result
     }
 
     fn run(&mut self) -> Result<Value, RuntimeError> {
@@ -132,6 +138,11 @@ impl Vm {
                 }
             }
         }
+    }
+
+    fn reset_stack(&mut self) {
+        self.stack.clear();
+        self.frames.clear();
     }
 
     fn backtrace(&self) -> Backtrace {
