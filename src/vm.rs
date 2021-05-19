@@ -94,28 +94,28 @@ impl Vm {
                 Op::Constant => {
                     self.stack.push(frame.constant(usize::from(frame.peek_byte())));
                     frame.inc_ip();
-                },
+                }
                 Op::Nil => {
                     self.stack.push(Value::NilVal);
-                },
+                }
                 Op::True => {
                     self.stack.push(Value::BoolVal(true));
-                },
+                }
                 Op::False => {
                     self.stack.push(Value::BoolVal(false));
-                },
+                }
                 Op::Add => {
                     number_bin_op!(self, frame, cur_op_index, add);
-                },
+                }
                 Op::Subtract => {
                     number_bin_op!(self, frame, cur_op_index, sub);
-                },
+                }
                 Op::Multiply => {
                     number_bin_op!(self, frame, cur_op_index, mul);
-                },
+                }
                 Op::Divide => {
                     number_bin_op!(self, frame, cur_op_index, div);
-                },
+                }
                 Op::Negate => {
                     match pop!(self) {
                         Value::NumberVal(x) => {
@@ -132,7 +132,7 @@ impl Vm {
                 }
                 Op::Print => {
                     print_value(pop!(self));
-                },
+                }
                 Op::Return => {
                     return Ok(pop!(self));
                 }
