@@ -154,6 +154,12 @@ impl Compiler {
         chunk.add_code_op(op, token.line);
     }
 
+    fn emit_ops(&mut self, parser: &Parser, op1: Op, op2: Op, chunk: &mut Chunk) {
+        let token = parser.previous_token();
+        chunk.add_code_op(op1, token.line);
+        chunk.add_code_op(op2, token.line);
+    }
+
     fn emit_op_with_byte_param(&mut self, parser: &Parser, op: Op, byte: u8, chunk: &mut Chunk) {
         let token = parser.previous_token();
         chunk.add_code_op(op, token.line);
@@ -199,8 +205,14 @@ impl Compiler {
             match parser.previous_token().token_type {
                 TokenType::Minus |
                 TokenType::Plus |
+                TokenType::Slash |
                 TokenType::Star |
-                TokenType::Slash => {
+                TokenType::BangEqual |
+                TokenType::EqualEqual |
+                TokenType::Greater |
+                TokenType::GreaterEqual |
+                TokenType::Less |
+                TokenType::LessEqual => {
                     self.binary(parser, chunk);
                 }
                 _ => unreachable!(),
@@ -221,8 +233,20 @@ impl Compiler {
         match op_type {
             TokenType::Plus => self.emit_op(parser, Op::Add, chunk),
             TokenType::Minus => self.emit_op(parser, Op::Subtract, chunk),
-            TokenType::Star => self.emit_op(parser, Op::Multiply, chunk),
             TokenType::Slash => self.emit_op(parser, Op::Divide, chunk),
+            TokenType::Star => self.emit_op(parser, Op::Multiply, chunk),
+            TokenType::BangEqual => {
+                self.emit_ops(parser, Op::Equal, Op::Not, chunk);
+            }
+            TokenType::EqualEqual => self.emit_op(parser, Op::Equal, chunk),
+            TokenType::Greater => self.emit_op(parser, Op::Greater, chunk),
+            TokenType::GreaterEqual => {
+                self.emit_ops(parser, Op::Less, Op::Not, chunk);
+            }
+            TokenType::Less => self.emit_op(parser, Op::Less, chunk),
+            TokenType::LessEqual => {
+                self.emit_ops(parser, Op::Greater, Op::Not, chunk);
+            }
             _ => unreachable!(),
         }
     }

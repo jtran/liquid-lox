@@ -1,4 +1,3 @@
-use std::ops::{Add, Div, Mul, Sub};
 use std::rc::Rc;
 
 use crate::compiler::U8_COUNT;
@@ -36,13 +35,13 @@ macro_rules! pop {
 }
 
 // Binary op for numeric operations.
-macro_rules! number_bin_op {
-    ( $self:expr, $frame:expr, $cur_op_index:expr, $op:ident ) => {
+macro_rules! bin_op {
+    ( $self:expr, $frame:expr, $cur_op_index:expr, $val_constr:ident, $op:tt ) => {
         let y = pop!($self);
         let x = pop!($self);
         match (x, y) {
             (Value::NumberVal(x), Value::NumberVal(y)) => {
-                $self.stack.push(Value::NumberVal(x.$op(y)));
+                $self.stack.push(Value::$val_constr(x $op y));
             }
             (x, y) => {
                 $self.stack.push(x);
@@ -104,17 +103,28 @@ impl Vm {
                 Op::False => {
                     self.stack.push(Value::BoolVal(false));
                 }
+                Op::Equal => {
+                    let y = pop!(self);
+                    let x = pop!(self);
+                    self.stack.push(Value::BoolVal(x.is_equal(&y)));
+                }
+                Op::Greater => {
+                    bin_op!(self, frame, cur_op_index, BoolVal, >);
+                }
+                Op::Less => {
+                    bin_op!(self, frame, cur_op_index, BoolVal, <);
+                }
                 Op::Add => {
-                    number_bin_op!(self, frame, cur_op_index, add);
+                    bin_op!(self, frame, cur_op_index, NumberVal, +);
                 }
                 Op::Subtract => {
-                    number_bin_op!(self, frame, cur_op_index, sub);
+                    bin_op!(self, frame, cur_op_index, NumberVal, -);
                 }
                 Op::Multiply => {
-                    number_bin_op!(self, frame, cur_op_index, mul);
+                    bin_op!(self, frame, cur_op_index, NumberVal, *);
                 }
                 Op::Divide => {
-                    number_bin_op!(self, frame, cur_op_index, div);
+                    bin_op!(self, frame, cur_op_index, NumberVal, /);
                 }
                 Op::Not => {
                     let v = pop!(self);

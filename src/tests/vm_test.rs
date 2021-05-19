@@ -105,6 +105,26 @@ fn test_eval_binary_ops() {
 }
 
 #[test]
+fn test_eval_comparison() {
+    assert_eq!(eval("true == true"), Ok(BoolVal(true)));
+    assert_eq!(eval("true != true"), Ok(BoolVal(false)));
+    assert_eq!(eval("true == 32"), Ok(BoolVal(false)));
+    assert_eq!(eval("true != 32"), Ok(BoolVal(true)));
+    assert_eq!(eval("nil == nil"), Ok(BoolVal(true)));
+    assert_eq!(eval("nil != nil"), Ok(BoolVal(false)));
+    assert_eq!(eval("nil == false"), Ok(BoolVal(false)));
+    assert_eq!(eval("nil != false"), Ok(BoolVal(true)));
+    assert_eq!(eval("2 < 3"), Ok(BoolVal(true)));
+    assert_eq!(eval("2 > 3"), Ok(BoolVal(false)));
+    assert_eq!(eval("2 <= 3"), Ok(BoolVal(true)));
+    assert_eq!(eval("2 >= 3"), Ok(BoolVal(false)));
+    assert_eq!(eval("nil < 1"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Operands must be numbers.", script_backtrace())));
+    assert_eq!(eval("1 > true"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Operands must be numbers.", script_backtrace())));
+    assert_eq!(eval("1 <= false"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Operands must be numbers.", script_backtrace())));
+    assert_eq!(eval("1 >= nil"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Operands must be numbers.", script_backtrace())));
+}
+
+#[test]
 fn test_eval_unary_ops() {
     assert_eq!(eval("!true"), Ok(BoolVal(false)));
     assert_eq!(eval("!false"), Ok(BoolVal(true)));

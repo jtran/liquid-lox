@@ -9,6 +9,10 @@ pub enum Op {
     True,
     False,
 
+    Equal,
+    Greater,
+    Less,
+
     Add,
     Subtract,
     Multiply,
@@ -104,6 +108,9 @@ impl Chunk {
             Some(op @ Op::Nil) |
             Some(op @ Op::True) |
             Some(op @ Op::False) |
+            Some(op @ Op::Equal) |
+            Some(op @ Op::Greater) |
+            Some(op @ Op::Less) |
             Some(op @ Op::Add) |
             Some(op @ Op::Subtract) |
             Some(op @ Op::Multiply) |
@@ -141,6 +148,9 @@ impl std::fmt::Display for Op {
             Nil => write!(f, "OP_NIL"),
             True => write!(f, "OP_TRUE"),
             False => write!(f, "OP_FALSE"),
+            Equal => write!(f, "OP_EQUAL"),
+            Greater => write!(f, "OP_GREATER"),
+            Less => write!(f, "OP_LESS"),
             Add => write!(f, "OP_ADD"),
             Subtract => write!(f, "OP_SUBTRACT"),
             Multiply => write!(f, "OP_MULTIPLY"),
