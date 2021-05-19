@@ -96,6 +96,7 @@ fn test_eval_literals() {
 #[test]
 fn test_eval_binary_ops() {
     assert_eq!(eval("40 + 2"), Ok(NumberVal(42.0)));
+    assert_eq!(eval("\"foo\" + \"bar\""), Ok(StringVal(Rc::new("foobar".to_string()))));
     assert_eq!(eval("40.0 - 10"), Ok(NumberVal(30.0)));
     assert_eq!(eval("7 * 3"), Ok(NumberVal(21.0)));
     assert_eq!(eval("10 / 2"), Ok(NumberVal(5.0)));

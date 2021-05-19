@@ -34,6 +34,13 @@ macro_rules! pop {
     };
 }
 
+// Push onto the stack.  This is just for convenience.
+macro_rules! push {
+    ( $self:expr, $value:expr ) => {
+        $self.stack.push($value)
+    };
+}
+
 // Binary op for numeric operations.
 macro_rules! bin_op {
     ( $self:expr, $frame:expr, $cur_op_index:expr, $val_constr:ident, $op:tt ) => {
@@ -115,7 +122,25 @@ impl Vm {
                     bin_op!(self, frame, cur_op_index, BoolVal, <);
                 }
                 Op::Add => {
-                    bin_op!(self, frame, cur_op_index, NumberVal, +);
+                    let y = pop!(self);
+                    let x = pop!(self);
+                    match (x, y) {
+                        (Value::StringVal(x), Value::StringVal(y)) => {
+                            let s = format!("{}{}", *x, *y);
+                            push!(self, Value::StringVal(Rc::new(s)));
+                        }
+                        (Value::NumberVal(x), Value::NumberVal(y)) => {
+                            push!(self, Value::NumberVal(x + y));
+                        }
+                        (x, y) => {
+                            push!(self, x);
+                            push!(self, y);
+                            return Err(RuntimeError::new(SourceLoc::new(
+                                frame.chunk.line(cur_op_index), 0),
+                                "Operands must be numbers.",
+                                self.backtrace()));
+                        }
+                    }
                 }
                 Op::Subtract => {
                     bin_op!(self, frame, cur_op_index, NumberVal, -);
