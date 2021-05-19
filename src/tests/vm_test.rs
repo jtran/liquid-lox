@@ -98,6 +98,10 @@ fn test_eval_binary_ops() {
     assert_eq!(eval("40.0 - 10"), Ok(NumberVal(30.0)));
     assert_eq!(eval("7 * 3"), Ok(NumberVal(21.0)));
     assert_eq!(eval("10 / 2"), Ok(NumberVal(5.0)));
+    assert_eq!(eval("nil + 1"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Operands must be numbers.", script_backtrace())));
+    assert_eq!(eval("1 - true"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Operands must be numbers.", script_backtrace())));
+    assert_eq!(eval("1 * false"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Operands must be numbers.", script_backtrace())));
+    assert_eq!(eval("1 / nil"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Operands must be numbers.", script_backtrace())));
 }
 
 #[test]

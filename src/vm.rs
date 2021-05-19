@@ -37,14 +37,21 @@ macro_rules! pop {
 
 // Binary op for numeric operations.
 macro_rules! number_bin_op {
-    ( $self:expr, $op:ident, $op_str:expr, $op_name:expr ) => {
+    ( $self:expr, $frame:expr, $cur_op_index:expr, $op:ident ) => {
         let y = pop!($self);
         let x = pop!($self);
         match (x, y) {
             (Value::NumberVal(x), Value::NumberVal(y)) => {
                 $self.stack.push(Value::NumberVal(x.$op(y)));
             }
-            (x, y) => panic!("Wrong type for {} op: {:?} {} {:?}", $op_name, x, $op_str, y),
+            (x, y) => {
+                $self.stack.push(x);
+                $self.stack.push(y);
+                return Err(RuntimeError::new(SourceLoc::new(
+                    $frame.chunk.line($cur_op_index), 0),
+                    "Operands must be numbers.",
+                    $self.backtrace()));
+            }
         }
     };
 }
@@ -92,16 +99,16 @@ impl Vm {
                     self.stack.push(Value::BoolVal(false));
                 },
                 Op::Add => {
-                    number_bin_op!(self, add, "+", "plus");
+                    number_bin_op!(self, frame, cur_op_index, add);
                 },
                 Op::Subtract => {
-                    number_bin_op!(self, sub, "-", "minus");
+                    number_bin_op!(self, frame, cur_op_index, sub);
                 },
                 Op::Multiply => {
-                    number_bin_op!(self, mul, "*", "multiply");
+                    number_bin_op!(self, frame, cur_op_index, mul);
                 },
                 Op::Divide => {
-                    number_bin_op!(self, div, "/", "divide");
+                    number_bin_op!(self, frame, cur_op_index, div);
                 },
                 Op::Negate => {
                     match pop!(self) {
