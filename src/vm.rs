@@ -1,7 +1,9 @@
 use std::rc::Rc;
 
+use fnv::FnvHashMap;
+
 use crate::compiler::U8_COUNT;
-use crate::op::{Chunk, Op};
+use crate::op::{Chunk, Op, Uninterned};
 use crate::source_loc::*;
 use crate::value::{Backtrace, RuntimeError, Value};
 
@@ -13,6 +15,9 @@ const STACK_MAX: usize = FRAMES_MAX * U8_COUNT;
 pub struct Vm {
     frames: Vec<CallFrame>,
     stack: Vec<Value>,
+    // Interned strings.  We can switch to HashSet once hash_set_entry lands in
+    // stable Rust.
+    strings: FnvHashMap<Rc<String>, Rc<String>>,
 }
 
 type ChunkRef = Rc<Chunk>;
@@ -62,11 +67,36 @@ macro_rules! bin_op {
     };
 }
 
+// Intern a String and return the interned Value.
+macro_rules! intern_string {
+    ( $self:expr, $s:expr ) => {{
+        let s = Rc::new($s);
+        let interned = $self.strings.entry(Rc::clone(&s)).or_insert(s);
+        Value::StringVal(Rc::clone(interned))
+    }};
+}
+
+// Intern an Uninterned and return the interned Value.  For Values other than
+// string, this just unwraps the Uninterned to get its underlying Value.
+macro_rules! intern {
+    ( $self:expr, $uninterned:expr ) => {{
+        let un: Uninterned = $uninterned;
+        match un.value {
+            Value::StringVal(s) => {
+                let interned = $self.strings.entry(Rc::clone(&s)).or_insert(s);
+                Value::StringVal(Rc::clone(interned))
+            }
+            v => v,
+        }
+    }};
+}
+
 impl Vm {
     pub fn new() -> Vm {
         Vm {
             frames: Vec::with_capacity(FRAMES_MAX),
             stack: Vec::with_capacity(STACK_MAX),
+            strings: FnvHashMap::with_capacity_and_hasher(64, Default::default()),
         }
     }
 
@@ -98,7 +128,8 @@ impl Vm {
             frame.ip += 1;
             match op {
                 Op::Constant => {
-                    self.stack.push(frame.constant(usize::from(frame.peek_byte())));
+                    let constant = frame.constant(usize::from(frame.peek_byte()));
+                    self.stack.push(intern!(self, constant));
                     frame.inc_ip();
                 }
                 Op::Nil => {
@@ -113,7 +144,7 @@ impl Vm {
                 Op::Equal => {
                     let y = pop!(self);
                     let x = pop!(self);
-                    self.stack.push(Value::BoolVal(x.is_equal(&y)));
+                    self.stack.push(Value::BoolVal(x.is_equal_interned(&y)));
                 }
                 Op::Greater => {
                     bin_op!(self, frame, cur_op_index, BoolVal, >);
@@ -127,7 +158,7 @@ impl Vm {
                     match (x, y) {
                         (Value::StringVal(x), Value::StringVal(y)) => {
                             let s = format!("{}{}", *x, *y);
-                            push!(self, Value::StringVal(Rc::new(s)));
+                            push!(self, intern_string!(self, s));
                         }
                         (Value::NumberVal(x), Value::NumberVal(y)) => {
                             push!(self, Value::NumberVal(x + y));
@@ -221,7 +252,7 @@ impl CallFrame {
         self.chunk.code_byte(index)
     }
 
-    pub fn constant(&self, index: usize) -> Value {
+    pub fn constant(&self, index: usize) -> Uninterned {
         self.chunk.constant(index)
     }
 }

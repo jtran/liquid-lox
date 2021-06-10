@@ -26,6 +26,11 @@ pub enum Op {
     Return,
 }
 
+#[derive(Debug)]
+pub struct Uninterned {
+    pub value: Value,
+}
+
 #[derive(Debug, Default)]
 pub struct Chunk {
     code: Vec<u8>,
@@ -70,8 +75,8 @@ impl Chunk {
         self.code[index]
     }
 
-    pub fn constant(&self, index: usize) -> Value {
-        self.constants[index].clone()
+    pub fn constant(&self, index: usize) -> Uninterned {
+        Uninterned { value: self.constants[index].clone() }
     }
 
     pub fn line(&self, index: usize) -> u32 {

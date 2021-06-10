@@ -51,8 +51,16 @@ impl Value {
             (NativeFunctionVal(id1), NativeFunctionVal(id2)) => id1 == id2,
             (NilVal, NilVal) => true,
             (NumberVal(x1), NumberVal(x2)) => x1 == x2,
-            (StringVal(s1), StringVal(s2)) => s1.deref() == s2.deref(),
+            (StringVal(s1), StringVal(s2)) => **s1 == **s2,
             (_, _) => false,
+        }
+    }
+
+    // Equality optimized for when you have interned strings.
+    pub fn is_equal_interned(&self, other: &Value) -> bool {
+        match (self, other) {
+            (StringVal(s1), StringVal(s2)) => Rc::ptr_eq(s1, s2),
+            _ => self.is_equal(other),
         }
     }
 
