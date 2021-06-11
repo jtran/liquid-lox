@@ -249,6 +249,10 @@ impl Compiler {
 
     fn declaration(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
         self.statement(parser, chunk);
+
+        if parser.panic_mode {
+            parser.synchronize();
+        }
     }
 
     fn statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
@@ -383,6 +387,30 @@ impl<'a> Parser<'a> {
         self.advance();
 
         true
+    }
+
+    pub fn synchronize(&mut self) {
+        self.panic_mode = false;
+
+        while self.current_token().token_type != TokenType::Eof {
+            if self.previous_token().token_type == TokenType::Semicolon {
+                return;
+            }
+
+            match self.current_token().token_type {
+                TokenType::Class |
+                TokenType::Fun |
+                TokenType::Var |
+                TokenType::For |
+                TokenType::If |
+                TokenType::While |
+                TokenType::Print |
+                TokenType::Return => { return; }
+                _ => {}
+            }
+
+            self.advance();
+        }
     }
 
     pub fn take_errors(&mut self) -> Vec<ParseErrorCause> {
