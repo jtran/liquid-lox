@@ -9,11 +9,17 @@ use crate::value::*;
 use crate::value::Value::*;
 use crate::vm::*;
 
-fn eval(code: &str) -> Result<Value, RuntimeError> {
+fn interpret(code: &str) -> Result<Value, RuntimeError> {
     let mut vm = Vm::new();
     let chunk = compiler::compile(code)?;
 
     vm.interpret_chunk(Rc::new(chunk))
+}
+
+fn eval(code: &str) -> Result<Value, RuntimeError> {
+    // Get the expression value.
+    let code = format!("return {};", code);
+    interpret(&code)
 }
 
 fn eval_byte_code(code: Vec<u8>, constants: Vec<Value>) -> Result<Value, RuntimeError> {
@@ -139,4 +145,12 @@ fn test_eval_unary_ops() {
     assert_eq!(eval("!\"\""), Ok(BoolVal(false)));
     assert_eq!(eval("-(2)"), Ok(NumberVal(-2.0)));
     assert_eq!(eval("-true"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Operand must be a number.", script_backtrace())));
+}
+
+#[test]
+fn test_print() {
+    assert_eq!(interpret("print \"print test\";"), Ok(NilVal));
+    assert_eq!(interpret("print 1 + 2;"), Ok(NilVal));
+    assert_eq!(interpret("print 1"), Err(RuntimeError::new(SourceLoc::new(1, 8), "parse error: Expect ';' after value.",
+        Backtrace::new(vec![BacktraceItem::new("(parser)".to_string(), SourceLoc::new(1, 1))]))));
 }

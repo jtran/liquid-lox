@@ -124,8 +124,9 @@ impl Compiler {
         let mut parser = Parser::new(tokens);
         let mut chunk = Chunk::default();
 
-        self.expression(&mut parser, &mut chunk);
-        parser.consume(TokenType::Eof, "Expected end of expression");
+        while !parser.matches(TokenType::Eof) {
+            self.declaration(&mut parser, &mut chunk);
+        }
 
         // End compiler.
         self.emit_return(&parser, &mut chunk);
@@ -224,6 +225,40 @@ impl Compiler {
 
     fn expression(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
         self.parse_precedence(parser, Precedence::Assignment, chunk);
+    }
+
+    fn expression_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        self.expression(parser, chunk);
+        parser.consume(TokenType::Semicolon, "Expect ';' after expression.");
+        self.emit_op(parser, Op::Pop, chunk);
+    }
+
+    fn print_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        self.expression(parser, chunk);
+        parser.consume(TokenType::Semicolon, "Expect ';' after value.");
+        self.emit_op(parser, Op::Print, chunk);
+    }
+
+    fn return_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        if !parser.matches(TokenType::Semicolon) {
+            self.expression(parser, chunk);
+            parser.consume(TokenType::Semicolon, "Expect ';' after return value.");
+        }
+        self.emit_op(parser, Op::Return, chunk);
+    }
+
+    fn declaration(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        self.statement(parser, chunk);
+    }
+
+    fn statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        if parser.matches(TokenType::Print) {
+            self.print_statement(parser, chunk);
+        } else if parser.matches(TokenType::Return) {
+            self.return_statement(parser, chunk);
+        } else {
+            self.expression_statement(parser, chunk);
+        }
     }
 
     fn binary(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
@@ -337,6 +372,17 @@ impl<'a> Parser<'a> {
         } else {
             self.error_at_current(message);
         }
+    }
+
+    pub fn check(&self, token_type: TokenType) -> bool {
+        self.tokens[self.current].token_type == token_type
+    }
+
+    pub fn matches(&mut self, token_type: TokenType) -> bool {
+        if !self.check(token_type) { return false; }
+        self.advance();
+
+        true
     }
 
     pub fn take_errors(&mut self) -> Vec<ParseErrorCause> {

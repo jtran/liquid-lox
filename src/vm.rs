@@ -141,6 +141,9 @@ impl Vm {
                 Op::False => {
                     self.stack.push(Value::BoolVal(false));
                 }
+                Op::Pop => {
+                    pop!(self);
+                }
                 Op::Equal => {
                     let y = pop!(self);
                     let x = pop!(self);
@@ -201,10 +204,17 @@ impl Vm {
                     }
                 }
                 Op::Print => {
-                    print_value(pop!(self));
+                    println!("{}", pop!(self).to_runtime_string());
                 }
                 Op::Return => {
-                    return Ok(pop!(self));
+                    // Temporary hack until we have a way to return the value of
+                    // expressions.
+                    let return_val = if self.stack.is_empty() {
+                        Value::NilVal
+                    } else {
+                        pop!(self)
+                    };
+                    return Ok(return_val);
                 }
             }
         }
@@ -219,10 +229,6 @@ impl Vm {
         // TODO
         Backtrace::new(Vec::new())
     }
-}
-
-fn print_value(value: Value) {
-    println!("{}", value.to_runtime_string());
 }
 
 impl CallFrame {
