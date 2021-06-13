@@ -189,6 +189,24 @@ impl Vm {
                     }
                     frame.inc_ip();
                 }
+                Op::SetGlobal => {
+                    let constant = frame.constant(usize::from(frame.peek_byte()));
+                    let name_value = intern!(self, constant);
+                    match name_value {
+                        Value::StringVal(s) => {
+                            let init_value = peek!(self, 0).clone();
+                            if self.globals.set(&*s, init_value) {
+                                self.globals.delete(&*s);
+                                return Err(RuntimeError::new(SourceLoc::new(
+                                    frame.chunk.line(cur_op_index), 0),
+                                    &format!("Undefined variable '{}'.", s),
+                                    self.backtrace()));
+                            }
+                        }
+                        _ => panic!("define global constant should be a string but found: {:?}", name_value),
+                    }
+                    frame.inc_ip();
+                }
                 Op::Equal => {
                     let y = pop!(self);
                     let x = pop!(self);

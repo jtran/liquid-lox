@@ -156,8 +156,21 @@ fn test_print() {
 }
 
 #[test]
-fn test_global_var() {
+fn test_global_var_define() {
     assert_eq!(interpret("var x;"), Ok(NilVal));
     assert_eq!(interpret("var x = 1;"), Ok(NilVal));
+}
+
+#[test]
+fn test_global_var_use() {
     assert_eq!(interpret("var x = 2; return x + 40;"), Ok(NumberVal(42.0)));
+}
+
+#[test]
+fn test_global_var_assign() {
+    assert_eq!(interpret("var x = 1; x = 2; return x;"), Ok(NumberVal(2.0)));
+    assert_eq!(interpret("var x = 1; x = 2 + 2; return x;"), Ok(NumberVal(4.0)));
+    assert_eq!(interpret("x = 2;"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Undefined variable 'x'.", script_backtrace())));
+    assert_eq!(interpret("1 + x = 2;"), Err(RuntimeError::new(SourceLoc::new(1, 7), "parse error: Invalid assignment target.",
+        Backtrace::new(vec![BacktraceItem::new("(parser)".to_string(), SourceLoc::new(1, 1))]))));
 }

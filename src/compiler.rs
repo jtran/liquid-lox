@@ -182,11 +182,13 @@ impl Compiler {
     fn parse_precedence(&mut self, parser: &mut Parser, precedence: Precedence, chunk: &mut Chunk) {
         parser.advance();
 
+        let can_assign = precedence <= Precedence::Assignment;
+
         match parser.previous_token().token_type {
             TokenType::LeftParen => self.grouping(parser, chunk),
             TokenType::Minus => self.unary(parser, chunk),
             TokenType::Bang => self.unary(parser, chunk),
-            TokenType::Identifier => self.variable(parser, chunk),
+            TokenType::Identifier => self.variable(parser, can_assign, chunk),
             TokenType::String => self.string(parser, chunk),
             TokenType::Number => self.number(parser, chunk),
             TokenType::False => self.literal(parser, chunk),
@@ -220,6 +222,11 @@ impl Compiler {
                     self.binary(parser, chunk);
                 }
                 _ => unreachable!(),
+            }
+
+            if can_assign && parser.matches(TokenType::Equal) {
+                parser.error_from_last("Invalid assignment target.");
+                return;
             }
         }
     }
@@ -357,13 +364,19 @@ impl Compiler {
         }
     }
 
-    fn named_variable(&mut self, parser: &mut Parser, identifier: String, chunk: &mut Chunk) {
+    fn named_variable(&mut self, parser: &mut Parser, identifier: String, can_assign: bool, chunk: &mut Chunk) {
         let arg = self.identifier_constant(parser, identifier, chunk);
-        self.emit_op_with_byte_param(parser, Op::GetGlobal, arg, chunk);
+
+        if can_assign && parser.matches(TokenType::Equal) {
+            self.expression(parser, chunk);
+            self.emit_op_with_byte_param(parser, Op::SetGlobal, arg, chunk);
+        } else {
+            self.emit_op_with_byte_param(parser, Op::GetGlobal, arg, chunk);
+        }
     }
 
-    fn variable(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
-        self.named_variable(parser, parser.previous_token().lexeme.to_string(), chunk);
+    fn variable(&mut self, parser: &mut Parser, can_assign: bool, chunk: &mut Chunk) {
+        self.named_variable(parser, parser.previous_token().lexeme.to_string(), can_assign, chunk);
     }
 
     fn unary(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
@@ -478,5 +491,15 @@ impl<'a> Parser<'a> {
         self.errors.push(ParseErrorCause::new_with_location(SourceLoc::new(token.line, token.column),
                                                             token.lexeme,
                                                             message))
+    }
+}
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_precedence_order() {
+        assert!(Precedence::None < Precedence::Assignment);
+        assert!(Precedence::Assignment < Precedence::Or);
     }
 }
