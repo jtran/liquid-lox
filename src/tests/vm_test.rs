@@ -154,3 +154,10 @@ fn test_print() {
     assert_eq!(interpret("print 1"), Err(RuntimeError::new(SourceLoc::new(1, 8), "parse error: Expect ';' after value.",
         Backtrace::new(vec![BacktraceItem::new("(parser)".to_string(), SourceLoc::new(1, 1))]))));
 }
+
+#[test]
+fn test_global_var() {
+    assert_eq!(interpret("var x;"), Ok(NilVal));
+    assert_eq!(interpret("var x = 1;"), Ok(NilVal));
+    assert_eq!(interpret("var x = 2; return x + 40;"), Ok(NumberVal(42.0)));
+}

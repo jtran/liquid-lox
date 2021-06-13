@@ -11,6 +11,9 @@ pub enum Op {
 
     Pop,
 
+    GetGlobal,
+    DefineGlobal,
+
     Equal,
     Greater,
     Less,
@@ -115,7 +118,9 @@ impl Chunk {
             Some(op @ Op::Nil) |
             Some(op @ Op::True) |
             Some(op @ Op::False) |
-            Some(op @ Op::Pop) |
+            Some(op @ Op::Pop) => self.simple_instruction(op, offset),
+            Some(op @ Op::GetGlobal) |
+            Some(op @ Op::DefineGlobal) => self.constant_instruction(op, offset),
             Some(op @ Op::Equal) |
             Some(op @ Op::Greater) |
             Some(op @ Op::Less) |
@@ -157,6 +162,8 @@ impl std::fmt::Display for Op {
             True => write!(f, "OP_TRUE"),
             False => write!(f, "OP_FALSE"),
             Pop => write!(f, "OP_POP"),
+            GetGlobal => write!(f, "OP_GET_GLOBAL"),
+            DefineGlobal => write!(f, "OP_DEFINE_GLOBAL"),
             Equal => write!(f, "OP_EQUAL"),
             Greater => write!(f, "OP_GREATER"),
             Less => write!(f, "OP_LESS"),

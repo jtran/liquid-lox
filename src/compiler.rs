@@ -186,6 +186,7 @@ impl Compiler {
             TokenType::LeftParen => self.grouping(parser, chunk),
             TokenType::Minus => self.unary(parser, chunk),
             TokenType::Bang => self.unary(parser, chunk),
+            TokenType::Identifier => self.variable(parser, chunk),
             TokenType::String => self.string(parser, chunk),
             TokenType::Number => self.number(parser, chunk),
             TokenType::False => self.literal(parser, chunk),
@@ -223,8 +224,36 @@ impl Compiler {
         }
     }
 
+    fn identifier_constant(&mut self, parser: &mut Parser, identifier: String, chunk: &mut Chunk) -> u8 {
+        self.make_constant(parser, Value::StringVal(Rc::new(identifier)), chunk)
+    }
+
+    fn parse_variable(&mut self, parser: &mut Parser, error_message: &str, chunk: &mut Chunk) -> u8 {
+        parser.consume(TokenType::Identifier, error_message);
+        let identifier = parser.previous_token().lexeme.to_string();
+
+        self.identifier_constant(parser, identifier, chunk)
+    }
+
+    fn define_variable(&mut self, parser: &mut Parser, global: u8, chunk: &mut Chunk) {
+        self.emit_op_with_byte_param(parser, Op::DefineGlobal, global, chunk)
+    }
+
     fn expression(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
         self.parse_precedence(parser, Precedence::Assignment, chunk);
+    }
+
+    fn var_declaration(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        let global = self.parse_variable(parser, "Expect variable name.", chunk);
+
+        if parser.matches(TokenType::Equal) {
+            self.expression(parser, chunk);
+        } else {
+            self.emit_op(parser, Op::Nil, chunk);
+        }
+        parser.consume(TokenType::Semicolon, "Expect ';' after variable declaration.");
+
+        self.define_variable(parser, global, chunk);
     }
 
     fn expression_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
@@ -248,7 +277,11 @@ impl Compiler {
     }
 
     fn declaration(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
-        self.statement(parser, chunk);
+        if parser.matches(TokenType::Var) {
+            self.var_declaration(parser, chunk);
+        } else {
+            self.statement(parser, chunk);
+        }
 
         if parser.panic_mode {
             parser.synchronize();
@@ -322,6 +355,15 @@ impl Compiler {
                 self.emit_constant(parser, value, chunk);
             }
         }
+    }
+
+    fn named_variable(&mut self, parser: &mut Parser, identifier: String, chunk: &mut Chunk) {
+        let arg = self.identifier_constant(parser, identifier, chunk);
+        self.emit_op_with_byte_param(parser, Op::GetGlobal, arg, chunk);
+    }
+
+    fn variable(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        self.named_variable(parser, parser.previous_token().lexeme.to_string(), chunk);
     }
 
     fn unary(&mut self, parser: &mut Parser, chunk: &mut Chunk) {

@@ -3,6 +3,7 @@ use std::rc::Rc;
 use fnv::FnvHashMap;
 
 use crate::compiler::U8_COUNT;
+use crate::field_table::FieldTable;
 use crate::op::{Chunk, Op, Uninterned};
 use crate::source_loc::*;
 use crate::value::{Backtrace, RuntimeError, Value};
@@ -18,6 +19,7 @@ pub struct Vm {
     // Interned strings.  We can switch to HashSet once hash_set_entry lands in
     // stable Rust.
     strings: FnvHashMap<Rc<String>, Rc<String>>,
+    globals: FieldTable,
 }
 
 type ChunkRef = Rc<Chunk>;
@@ -37,6 +39,14 @@ macro_rules! pop {
     ( $self:expr ) => {
         $self.stack.pop().expect("popped past the end of the stack")
     };
+}
+
+macro_rules! peek {
+    ( $self:expr, $distance:expr ) => {{
+        let distance = $distance;
+        let len = $self.stack.len();
+        $self.stack.get(len - 1 - distance).expect("tried to peek too far back on the stack")
+    }};
 }
 
 // Push onto the stack.  This is just for convenience.
@@ -97,6 +107,7 @@ impl Vm {
             frames: Vec::with_capacity(FRAMES_MAX),
             stack: Vec::with_capacity(STACK_MAX),
             strings: FnvHashMap::with_capacity_and_hasher(64, Default::default()),
+            globals: FieldTable::new(),
         }
     }
 
@@ -143,6 +154,40 @@ impl Vm {
                 }
                 Op::Pop => {
                     pop!(self);
+                }
+                Op::GetGlobal => {
+                    let constant = frame.constant(usize::from(frame.peek_byte()));
+                    let name_value = intern!(self, constant);
+                    match name_value {
+                        Value::StringVal(s) => {
+                            match self.globals.get(&*s) {
+                                Some(v) => {
+                                    push!(self, v);
+                                }
+                                None => {
+                                    return Err(RuntimeError::new(SourceLoc::new(
+                                        frame.chunk.line(cur_op_index), 0),
+                                        &format!("Undfined variable '{}'.", s),
+                                        self.backtrace()));
+                                }
+                            }
+                        }
+                        _ => panic!("get global constant should be a string but found: {:?}", name_value),
+                    }
+                    frame.inc_ip();
+                }
+                Op::DefineGlobal => {
+                    let constant = frame.constant(usize::from(frame.peek_byte()));
+                    let name_value = intern!(self, constant);
+                    match name_value {
+                        Value::StringVal(s) => {
+                            let init_value = peek!(self, 0).clone();
+                            self.globals.set(&*s, init_value);
+                            pop!(self);
+                        }
+                        _ => panic!("define global constant should be a string but found: {:?}", name_value),
+                    }
+                    frame.inc_ip();
                 }
                 Op::Equal => {
                     let y = pop!(self);
