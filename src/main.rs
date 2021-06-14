@@ -3,6 +3,7 @@ mod environment;
 mod error;
 mod field_table;
 mod interpreter;
+mod op;
 mod parser;
 mod resolver;
 mod scanner;
@@ -10,6 +11,7 @@ mod source_loc;
 mod token;
 mod util;
 mod value;
+mod vm;
 
 #[cfg(test)]
 mod tests;
