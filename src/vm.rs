@@ -155,6 +155,16 @@ impl Vm {
                 Op::Pop => {
                     pop!(self);
                 }
+                Op::GetLocal => {
+                    let slot_index = usize::from(frame.read_byte());
+                    let value = self.stack[slot_index].clone();
+                    push!(self, value);
+                }
+                Op::SetLocal => {
+                    let slot_index = usize::from(frame.read_byte());
+                    // The return value of assignment is the value assigned.
+                    self.stack[slot_index] = peek!(self, 0).clone();
+                }
                 Op::GetGlobal => {
                     let constant = frame.constant(usize::from(frame.peek_byte()));
                     let name_value = intern!(self, constant);
@@ -306,6 +316,14 @@ impl CallFrame {
     #[inline]
     fn peek_byte(&self) -> u8 {
         self.code_byte(self.ip)
+    }
+
+    #[inline]
+    fn read_byte(&mut self) -> u8 {
+        let byte = self.code_byte(self.ip);
+        self.inc_ip();
+
+        byte
     }
 
     #[inline]

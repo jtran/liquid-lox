@@ -36,6 +36,10 @@ fn script_backtrace() -> Backtrace {
     Backtrace::new(Vec::new())
 }
 
+fn parse_backtrace() -> Backtrace {
+    Backtrace::new(vec![BacktraceItem::new("(parser)".to_string(), SourceLoc::new(1, 1))])
+}
+
 #[test]
 fn test_vm_size_of_call_frame() {
     assert_eq!(mem::size_of::<CallFrame>(), 40);
@@ -151,8 +155,7 @@ fn test_eval_unary_ops() {
 fn test_print() {
     assert_eq!(interpret("print \"print test\";"), Ok(NilVal));
     assert_eq!(interpret("print 1 + 2;"), Ok(NilVal));
-    assert_eq!(interpret("print 1"), Err(RuntimeError::new(SourceLoc::new(1, 8), "parse error: Expect ';' after value.",
-        Backtrace::new(vec![BacktraceItem::new("(parser)".to_string(), SourceLoc::new(1, 1))]))));
+    assert_eq!(interpret("print 1"), Err(RuntimeError::new(SourceLoc::new(1, 8), "parse error: Expect ';' after value.", parse_backtrace())));
 }
 
 #[test]
@@ -171,6 +174,26 @@ fn test_global_var_assign() {
     assert_eq!(interpret("var x = 1; x = 2; return x;"), Ok(NumberVal(2.0)));
     assert_eq!(interpret("var x = 1; x = 2 + 2; return x;"), Ok(NumberVal(4.0)));
     assert_eq!(interpret("x = 2;"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Undefined variable 'x'.", script_backtrace())));
-    assert_eq!(interpret("1 + x = 2;"), Err(RuntimeError::new(SourceLoc::new(1, 7), "parse error: Invalid assignment target.",
-        Backtrace::new(vec![BacktraceItem::new("(parser)".to_string(), SourceLoc::new(1, 1))]))));
+    assert_eq!(interpret("1 + x = 2;"), Err(RuntimeError::new(SourceLoc::new(1, 7), "parse error: Invalid assignment target.", parse_backtrace())));
+}
+
+#[test]
+fn test_blocks() {
+    assert_eq!(interpret("var x = 1; { var x = 2; return x; }"), Ok(NumberVal(2.0)));
+    assert_eq!(interpret("var x = 1; { var x = 2; } return x;"), Ok(NumberVal(1.0)));
+    // Assignment.
+    assert_eq!(interpret("var x = 1; { var x = 2; x = 3; return x; }"), Ok(NumberVal(3.0)));
+    assert_eq!(interpret("var x = 1; { var x = 2; x = 3; } return x;"), Ok(NumberVal(1.0)));
+}
+
+#[test]
+fn test_local_var() {
+    assert_eq!(interpret("{ var x; }"), Ok(NilVal));
+    assert_eq!(interpret("{ var x = 1; }"), Ok(NilVal));
+    assert_eq!(interpret("{ var x = x; }"), Err(RuntimeError::new(SourceLoc::new(1, 11), "parse error: Cannot read local variable in its own initializer.", parse_backtrace())));
+    assert_eq!(interpret("{ var x = 2; return x + 40; }"), Ok(NumberVal(42.0)));
+    assert_eq!(interpret("{ var x = 1; x = 2; return x; }"), Ok(NumberVal(2.0)));
+    assert_eq!(interpret("{ var x = 1; x = 2 + 2; return x; }"), Ok(NumberVal(4.0)));
+    assert_eq!(interpret("{ x = 2; }"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Undefined variable 'x'.", script_backtrace())));
+    assert_eq!(interpret("{ 1 + x = 2; }"), Err(RuntimeError::new(SourceLoc::new(1, 9), "parse error: Invalid assignment target.", parse_backtrace())));
 }

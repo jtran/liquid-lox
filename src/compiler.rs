@@ -38,12 +38,24 @@ enum Precedence {
 
 #[derive(Debug)]
 pub struct Compiler {
+    locals: Vec<Local>,
+    // Zero is the global scope.  Each number higher is a level nested deeper.
+    scope_depth: u8,
 }
 
 #[derive(Debug)]
 struct Local {
     name: String,
-    depth: usize,
+    // The scope depth that this local variable was declared in.
+    depth: LocalDepth,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum LocalDepth {
+    // Declared but not yet defined.
+    Uninitialized,
+    // The scope depth that this local variable was declared in.
+    Depth(u8),
 }
 
 #[derive(Debug)]
@@ -115,7 +127,10 @@ impl Precedence {
 
 impl Compiler {
     pub fn new() -> Compiler {
-        Compiler {}
+        Compiler {
+            locals: Vec::with_capacity(U8_COUNT),
+            scope_depth: 0,
+        }
     }
 
     pub fn compile(&mut self, source: &str) -> Result<Chunk, ParseError> {
@@ -140,6 +155,35 @@ impl Compiler {
         }
 
         Ok(chunk)
+    }
+
+    fn begin_scope(&mut self) {
+        assert!(self.scope_depth < u8::MAX);
+        self.scope_depth += 1;
+    }
+
+    fn end_scope(&mut self, parser: &Parser, chunk: &mut Chunk) {
+        assert!(self.scope_depth > 0);
+        self.scope_depth -= 1;
+
+        // Pop the local variables of the scope that's ending.
+        loop {
+            match self.locals.last() {
+                None => break,
+                Some(local) => {
+                    match local.depth {
+                        LocalDepth::Uninitialized => break,
+                        LocalDepth::Depth(depth) => {
+                            if depth <= self.scope_depth {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            self.emit_op(parser, Op::Pop, chunk);
+            self.locals.pop();
+        }
     }
 
     fn emit_constant(&mut self, parser: &mut Parser, value: Value, chunk: &mut Chunk) {
@@ -235,19 +279,107 @@ impl Compiler {
         self.make_constant(parser, Value::StringVal(Rc::new(identifier)), chunk)
     }
 
-    fn parse_variable(&mut self, parser: &mut Parser, error_message: &str, chunk: &mut Chunk) -> u8 {
-        parser.consume(TokenType::Identifier, error_message);
-        let identifier = parser.previous_token().lexeme.to_string();
-
-        self.identifier_constant(parser, identifier, chunk)
+    fn resolve_local(&self, parser: &mut Parser, name: &str) -> Option<u8> {
+        // Look at most recent locals first so that new variables shadow old
+        // ones.
+        for (i, local) in self.locals.iter().enumerate().rev() {
+            if local.name == name {
+                match local.depth {
+                    LocalDepth::Uninitialized => {
+                        parser.error_from_last("Cannot read local variable in its own initializer.");
+                    }
+                    LocalDepth::Depth(_) => {}
+                }
+                assert!(i < u8::MAX as usize);
+                return Some(i as u8);
+            }
+        }
+        None
     }
 
-    fn define_variable(&mut self, parser: &mut Parser, global: u8, chunk: &mut Chunk) {
-        self.emit_op_with_byte_param(parser, Op::DefineGlobal, global, chunk)
+    fn add_local(&mut self, parser: &mut Parser, name: String) {
+        if self.locals.len() == U8_COUNT {
+            parser.error_from_last("Too many local variables in function.");
+            return;
+        }
+
+        self.locals.push(Local {
+            name,
+            depth: LocalDepth::Uninitialized,
+        });
+    }
+
+    fn declare_variable(&mut self, parser: &mut Parser) {
+        // Nothing to do for global variables.
+        if self.scope_depth == 0 { return; }
+
+        let name = parser.previous_token().lexeme.to_string();
+        for local in self.locals.iter().rev() {
+            // If we reach an enclosing scope, we're done.
+            match local.depth {
+                LocalDepth::Uninitialized => {}
+                LocalDepth::Depth(depth) => {
+                    if depth < self.scope_depth {
+                        break;
+                    }
+                }
+            }
+
+            if name == local.name {
+                parser.error_from_last("Already variable with this name in this scope.");
+                // Should we break here?  The book doesn't.
+            }
+        }
+
+        self.add_local(parser, name);
+    }
+
+    // Returns the constant index.
+    fn parse_variable(&mut self, parser: &mut Parser, error_message: &str, chunk: &mut Chunk) -> Option<u8> {
+        parser.consume(TokenType::Identifier, error_message);
+
+        self.declare_variable(parser);
+        // Local variables aren't looked up by name, so we don't need to create
+        // a constant.
+        if self.scope_depth > 0 { return None; }
+
+        let identifier = parser.previous_token().lexeme.to_string();
+
+        Some(self.identifier_constant(parser, identifier, chunk))
+    }
+
+    fn mark_initialized(&mut self) {
+        match self.locals.last_mut() {
+            None => {
+                panic!("Tried to mark initialized when there are no locals");
+            }
+            Some(local) => {
+                local.depth = LocalDepth::Depth(self.scope_depth);
+            }
+        }
+    }
+
+    fn define_variable(&mut self, parser: &mut Parser, global: Option<u8>, chunk: &mut Chunk) {
+        if let Some(global) = global {
+            assert!(self.scope_depth == 0);
+            self.emit_op_with_byte_param(parser, Op::DefineGlobal, global, chunk)
+        } else {
+            // Nothing to do at runtime for a local variable.  The temporary
+            // initial value on the stack becomes the local variable slot.
+            self.mark_initialized();
+        }
     }
 
     fn expression(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
         self.parse_precedence(parser, Precedence::Assignment, chunk);
+    }
+
+    fn block(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        while !parser.check(TokenType::RightBrace) && !parser.check(TokenType::Eof) {
+            self.declaration(parser, chunk);
+        }
+
+        parser.consume(TokenType::RightBrace, "Expect '}' after block.");
     }
 
     fn var_declaration(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
@@ -298,6 +430,10 @@ impl Compiler {
     fn statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
         if parser.matches(TokenType::Print) {
             self.print_statement(parser, chunk);
+        } else if parser.matches(TokenType::LeftBrace) {
+            self.begin_scope();
+            self.block(parser, chunk);
+            self.end_scope(parser, chunk);
         } else if parser.matches(TokenType::Return) {
             self.return_statement(parser, chunk);
         } else {
@@ -365,13 +501,19 @@ impl Compiler {
     }
 
     fn named_variable(&mut self, parser: &mut Parser, identifier: String, can_assign: bool, chunk: &mut Chunk) {
-        let arg = self.identifier_constant(parser, identifier, chunk);
+        let local_index = self.resolve_local(parser, &identifier);
+        let (get_op, set_op, arg) = if let Some(local_index) = local_index {
+            (Op::GetLocal, Op::SetLocal, local_index)
+        } else {
+            let constant_index = self.identifier_constant(parser, identifier, chunk);
+            (Op::GetGlobal, Op::SetGlobal, constant_index)
+        };
 
         if can_assign && parser.matches(TokenType::Equal) {
             self.expression(parser, chunk);
-            self.emit_op_with_byte_param(parser, Op::SetGlobal, arg, chunk);
+            self.emit_op_with_byte_param(parser, set_op, arg, chunk);
         } else {
-            self.emit_op_with_byte_param(parser, Op::GetGlobal, arg, chunk);
+            self.emit_op_with_byte_param(parser, get_op, arg, chunk);
         }
     }
 

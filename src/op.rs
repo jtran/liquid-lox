@@ -11,6 +11,9 @@ pub enum Op {
 
     Pop,
 
+    GetLocal,
+    SetLocal,
+
     GetGlobal,
     DefineGlobal,
     SetGlobal,
@@ -120,6 +123,8 @@ impl Chunk {
             Some(op @ Op::True) |
             Some(op @ Op::False) |
             Some(op @ Op::Pop) => self.simple_instruction(op, offset),
+            Some(op @ Op::GetLocal) |
+            Some(op @ Op::SetLocal) => self.byte_instruction(op, offset),
             Some(op @ Op::GetGlobal) |
             Some(op @ Op::DefineGlobal) |
             Some(op @ Op::SetGlobal) => self.constant_instruction(op, offset),
@@ -143,6 +148,13 @@ impl Chunk {
         offset + 1
     }
 
+    fn byte_instruction(&self, op: Op, offset: usize) -> usize {
+        let byte = self.code[offset + 1];
+        println!("{:<16} {:>4}", op, byte);
+
+        offset + 2
+    }
+
     fn constant_instruction(&self, op: Op, offset: usize) -> usize {
         let constant_index = self.code[offset + 1];
         let value = &self.constants[usize::from(constant_index)];
@@ -164,6 +176,8 @@ impl std::fmt::Display for Op {
             True => write!(f, "OP_TRUE"),
             False => write!(f, "OP_FALSE"),
             Pop => write!(f, "OP_POP"),
+            GetLocal => write!(f, "OP_GET_LOCAL"),
+            SetLocal => write!(f, "OP_SET_LOCAL"),
             GetGlobal => write!(f, "OP_GET_GLOBAL"),
             DefineGlobal => write!(f, "OP_DEFINE_GLOBAL"),
             SetGlobal => write!(f, "OP_SET_GLOBAL"),
