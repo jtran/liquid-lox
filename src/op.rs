@@ -32,6 +32,9 @@ pub enum Op {
 
     Print,
 
+    Jump,
+    JumpIfFalse,
+
     Return,
 }
 
@@ -55,6 +58,10 @@ impl Chunk {
             constants,
             lines,
         }
+    }
+
+    pub fn code_len(&self) -> usize {
+        self.code.len()
     }
 
     pub fn add_code_op(&mut self, op: Op, line: u32) {
@@ -82,6 +89,10 @@ impl Chunk {
 
     pub fn code_byte(&self, index: usize) -> u8 {
         self.code[index]
+    }
+
+    pub fn set_code_byte(&mut self, index: usize, byte: u8) {
+        self.code[index] = byte;
     }
 
     pub fn constant(&self, index: usize) -> Uninterned {
@@ -137,9 +148,22 @@ impl Chunk {
             Some(op @ Op::Divide) |
             Some(op @ Op::Not) |
             Some(op @ Op::Negate) |
-            Some(op @ Op::Print) |
+            Some(op @ Op::Print) => self.simple_instruction(op, offset),
+            Some(op @ Op::Jump) |
+            Some(op @ Op::JumpIfFalse) => self.jump_instruction(op, 1, offset),
             Some(op @ Op::Return) => self.simple_instruction(op, offset),
         }
+    }
+
+    fn constant_instruction(&self, op: Op, offset: usize) -> usize {
+        let constant_index = self.code[offset + 1];
+        let value = &self.constants[usize::from(constant_index)];
+        println!("{:<16} {:>4} '{}'",
+                 op,
+                 constant_index,
+                 value.to_runtime_string());
+
+        offset + 2
     }
 
     fn simple_instruction(&self, op: Op, offset: usize) -> usize {
@@ -155,15 +179,15 @@ impl Chunk {
         offset + 2
     }
 
-    fn constant_instruction(&self, op: Op, offset: usize) -> usize {
-        let constant_index = self.code[offset + 1];
-        let value = &self.constants[usize::from(constant_index)];
-        println!("{:<16} {:>4} '{}'",
+    fn jump_instruction(&self, op: Op, sign: u16, offset: usize) -> usize {
+        let jump_delta = u16::from(self.code[offset + 1]) << 8
+            | u16::from(self.code[offset + 2]);
+        println!("{:<16} {:>4} -> {}",
                  op,
-                 constant_index,
-                 value.to_runtime_string());
+                 jump_delta,
+                 offset + 3 + usize::from(sign * jump_delta));
 
-        offset + 2
+        offset + 3
     }
 }
 
@@ -191,6 +215,8 @@ impl std::fmt::Display for Op {
             Not => write!(f, "OP_NOT"),
             Negate => write!(f, "OP_NEGATE"),
             Print => write!(f, "OP_PRINT"),
+            Jump => write!(f, "OP_JUMP"),
+            JumpIfFalse => write!(f, "OP_JUMP_IF_FALSE"),
             Return => write!(f, "OP_RETURN"),
         }
     }

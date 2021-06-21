@@ -197,3 +197,17 @@ fn test_local_var() {
     assert_eq!(interpret("{ x = 2; }"), Err(RuntimeError::new(SourceLoc::new(1, 0), "Undefined variable 'x'.", script_backtrace())));
     assert_eq!(interpret("{ 1 + x = 2; }"), Err(RuntimeError::new(SourceLoc::new(1, 9), "parse error: Invalid assignment target.", parse_backtrace())));
 }
+
+#[test]
+fn test_if_else() {
+    assert_eq!(interpret("var x = 1; if (0 < 1) x = 2; else x = 3; return x;"), Ok(NumberVal(2.0)));
+    assert_eq!(interpret("var x = 1; if (0 > 1) x = 2; else x = 3; return x;"), Ok(NumberVal(3.0)));
+    assert_eq!(interpret("var x = 1; if (0 > 1) { x = 2; } else { x = 3; } return x;"), Ok(NumberVal(3.0)));
+    // Dangling else ambiguity.
+    assert_eq!(interpret("var x = 1; if (true) if (false) x = 2; else x = 3; return x;"), Ok(NumberVal(3.0)));
+}
+
+#[test]
+fn test_declaration_in_if_then_body() {
+    assert_eq!(interpret("if (true) var x = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 11), "parse error: Expect expression.", parse_backtrace())));
+}

@@ -39,6 +39,10 @@ impl Value {
         }
     }
 
+    pub fn is_falsey(&self) -> bool {
+        !self.is_truthy()
+    }
+
     pub fn is_equal(&self, other: &Value) -> bool {
         match (self, other) {
             (ArrayVal(a1), ArrayVal(a2)) => a1 == a2,

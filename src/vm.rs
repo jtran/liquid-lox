@@ -279,6 +279,18 @@ impl Vm {
                 Op::Print => {
                     println!("{}", pop!(self).to_runtime_string());
                 }
+                Op::Jump => {
+                    let delta = frame.read_u16();
+                    frame.ip += usize::from(delta);
+                }
+                Op::JumpIfFalse => {
+                    let delta = frame.read_u16();
+                    // The condition isn't popped.
+                    let condition = peek!(self, 0);
+                    if condition.is_falsey() {
+                        frame.ip += usize::from(delta);
+                    }
+                }
                 Op::Return => {
                     // Temporary hack until we have a way to return the value of
                     // expressions.
@@ -324,6 +336,15 @@ impl CallFrame {
         self.inc_ip();
 
         byte
+    }
+
+    #[inline]
+    fn read_u16(&mut self) -> u16 {
+        let n = u16::from(self.code_byte(self.ip)) << 8
+            | u16::from(self.code_byte(self.ip + 1));
+        self.ip += 2;
+
+        n
     }
 
     #[inline]

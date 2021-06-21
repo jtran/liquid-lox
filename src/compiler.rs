@@ -212,6 +212,19 @@ impl Compiler {
         chunk.add_code(byte, token.line);
     }
 
+    fn emit_jump(&mut self, parser: &Parser, op: Op, chunk: &mut Chunk) -> usize {
+        let token = parser.previous_token();
+        chunk.add_code_op(op, token.line);
+        // Location of jump amount that will be patched later.
+        let jump_location_index = chunk.code_len();
+        // Placeholder jump amount.  If you change this, you also need to change
+        // patch_jump().
+        chunk.add_code(u8::MAX, token.line);
+        chunk.add_code(u8::MAX, token.line);
+
+        jump_location_index
+    }
+
     fn make_constant(&mut self, parser: &mut Parser, value: Value, chunk: &mut Chunk) -> u8 {
         let constant = chunk.add_constant(value);
         match u8::try_from(constant) {
@@ -221,6 +234,21 @@ impl Compiler {
             }
             Ok(byte) => byte,
         }
+    }
+
+    fn patch_jump(&mut self, parser: &mut Parser, jump_index: usize, chunk: &mut Chunk) {
+        // The extra 2 is to adjust for the delta itself in the bytecode.  If
+        // you change this, you also need to change emit_jump().
+        let cur_len = chunk.code_len();
+        assert!(cur_len >= jump_index + 2);
+        let jump_delta = cur_len - jump_index - 2;
+
+        if jump_delta > usize::from(u16::MAX) {
+            parser.error_from_last("Too much code to jump over.");
+        }
+
+        chunk.set_code_byte(jump_index, ((jump_delta >> 8) & 0xff) as u8);
+        chunk.set_code_byte(jump_index + 1, (jump_delta & 0xff) as u8);
     }
 
     fn parse_precedence(&mut self, parser: &mut Parser, precedence: Precedence, chunk: &mut Chunk) {
@@ -401,6 +429,28 @@ impl Compiler {
         self.emit_op(parser, Op::Pop, chunk);
     }
 
+    fn if_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        parser.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
+        self.expression(parser, chunk);
+        parser.consume(TokenType::RightParen, "Expect ')' after condition.");
+
+        let then_jump = self.emit_jump(parser, Op::JumpIfFalse, chunk);
+        // Pop the condition in the truthy case.
+        self.emit_op(parser, Op::Pop, chunk);
+        self.statement(parser, chunk);
+
+        let else_jump = self.emit_jump(parser, Op::Jump, chunk);
+
+        self.patch_jump(parser, then_jump, chunk);
+        // Pop the condition in the falsey case.
+        self.emit_op(parser, Op::Pop, chunk);
+
+        if parser.matches(TokenType::Else) {
+            self.statement(parser, chunk);
+        }
+        self.patch_jump(parser, else_jump, chunk);
+    }
+
     fn print_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
         self.expression(parser, chunk);
         parser.consume(TokenType::Semicolon, "Expect ';' after value.");
@@ -430,6 +480,8 @@ impl Compiler {
     fn statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
         if parser.matches(TokenType::Print) {
             self.print_statement(parser, chunk);
+        } else if parser.matches(TokenType::If) {
+            self.if_statement(parser, chunk);
         } else if parser.matches(TokenType::LeftBrace) {
             self.begin_scope();
             self.block(parser, chunk);
