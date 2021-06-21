@@ -216,3 +216,16 @@ fn test_declaration_in_if_then_body() {
 fn test_while() {
     assert_eq!(interpret("var x = 0; while (x < 3) x = x + 1; return x;"), Ok(NumberVal(3.0)));
 }
+
+#[test]
+fn test_for_loop() {
+    assert_eq!(interpret("var x = 1;
+        for (var i = 0; i < 3; i = i + 1)
+            x = x * 2;
+        return x;"), Ok(NumberVal(8.0)));
+    assert_eq!(interpret("var x = 1;
+        for (var i = 0; i < 3; i = i + 1) {
+            x = x * 2;
+        }
+        return x;"), Ok(NumberVal(8.0)));
+}

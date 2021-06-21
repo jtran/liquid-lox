@@ -445,6 +445,57 @@ impl Compiler {
         self.emit_op(parser, Op::Pop, chunk);
     }
 
+    fn for_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        // Any variable declared in the initializer should be scoped to the
+        // for-loop.
+        self.begin_scope();
+        parser.consume(TokenType::LeftParen, "Expect '(' after 'for'.");
+        if parser.matches(TokenType::Semicolon) {
+            // No initialize statement.
+        } else if parser.matches(TokenType::Var) {
+            self.var_declaration(parser, chunk);
+        } else {
+            self.expression_statement(parser, chunk);
+        }
+
+        let mut loop_start = chunk.code_len();
+        let mut exit_jump = None;
+        // Loop condition.
+        if !parser.matches(TokenType::Semicolon) {
+            self.expression(parser, chunk);
+            parser.consume(TokenType::Semicolon, "Expect ';' after loop condition.");
+
+            exit_jump = Some(self.emit_jump(parser, Op::JumpIfFalse, chunk));
+            // Pop the condition.
+            self.emit_op(parser, Op::Pop, chunk);
+        }
+
+        // Loop increment.
+        if !parser.matches(TokenType::RightParen) {
+            let body_jump = self.emit_jump(parser, Op::Jump, chunk);
+            let increment_start = chunk.code_len();
+            self.expression(parser, chunk);
+            self.emit_op(parser, Op::Pop, chunk);
+            parser.consume(TokenType::RightParen, "Expect ')' after for clauses.");
+
+            self.emit_loop(parser, loop_start, chunk);
+            loop_start = increment_start;
+            self.patch_jump(parser, body_jump, chunk);
+        }
+
+        // Loop body.
+        self.statement(parser, chunk);
+        self.emit_loop(parser, loop_start, chunk);
+
+        if let Some(exit_jump) = exit_jump {
+            self.patch_jump(parser, exit_jump, chunk);
+            // Pop the condition.
+            self.emit_op(parser, Op::Pop, chunk);
+        }
+
+        self.end_scope(parser, chunk);
+    }
+
     fn if_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
         parser.consume(TokenType::LeftParen, "Expect '(' after 'if'.");
         self.expression(parser, chunk);
@@ -513,6 +564,8 @@ impl Compiler {
     fn statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
         if parser.matches(TokenType::Print) {
             self.print_statement(parser, chunk);
+        } else if parser.matches(TokenType::For) {
+            self.for_statement(parser, chunk);
         } else if parser.matches(TokenType::If) {
             self.if_statement(parser, chunk);
         } else if parser.matches(TokenType::While) {
