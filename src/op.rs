@@ -34,6 +34,7 @@ pub enum Op {
 
     Jump,
     JumpIfFalse,
+    Loop,
 
     Return,
 }
@@ -48,6 +49,12 @@ pub struct Chunk {
     code: Vec<u8>,
     constants: Vec<Value>,
     lines: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum JumpDirection {
+    Forward,
+    Backward,
 }
 
 impl Chunk {
@@ -150,7 +157,8 @@ impl Chunk {
             Some(op @ Op::Negate) |
             Some(op @ Op::Print) => self.simple_instruction(op, offset),
             Some(op @ Op::Jump) |
-            Some(op @ Op::JumpIfFalse) => self.jump_instruction(op, 1, offset),
+            Some(op @ Op::JumpIfFalse) => self.jump_instruction(op, JumpDirection::Forward, offset),
+            Some(op @ Op::Loop) => self.jump_instruction(op, JumpDirection::Backward, offset),
             Some(op @ Op::Return) => self.simple_instruction(op, offset),
         }
     }
@@ -179,13 +187,16 @@ impl Chunk {
         offset + 2
     }
 
-    fn jump_instruction(&self, op: Op, sign: u16, offset: usize) -> usize {
+    fn jump_instruction(&self, op: Op, direction: JumpDirection, offset: usize) -> usize {
         let jump_delta = u16::from(self.code[offset + 1]) << 8
             | u16::from(self.code[offset + 2]);
         println!("{:<16} {:>4} -> {}",
                  op,
                  jump_delta,
-                 offset + 3 + usize::from(sign * jump_delta));
+                 match direction {
+                     JumpDirection::Forward => offset + 3 + usize::from(jump_delta),
+                     JumpDirection::Backward => offset + 3 - usize::from(jump_delta),
+                 });
 
         offset + 3
     }
@@ -217,6 +228,7 @@ impl std::fmt::Display for Op {
             Print => write!(f, "OP_PRINT"),
             Jump => write!(f, "OP_JUMP"),
             JumpIfFalse => write!(f, "OP_JUMP_IF_FALSE"),
+            Loop => write!(f, "OP_LOOP"),
             Return => write!(f, "OP_RETURN"),
         }
     }

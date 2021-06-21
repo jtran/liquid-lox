@@ -291,6 +291,10 @@ impl Vm {
                         frame.ip += usize::from(delta);
                     }
                 }
+                Op::Loop => {
+                    let delta = frame.read_u16();
+                    frame.ip -= usize::from(delta);
+                }
                 Op::Return => {
                     // Temporary hack until we have a way to return the value of
                     // expressions.

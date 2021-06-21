@@ -211,3 +211,8 @@ fn test_if_else() {
 fn test_declaration_in_if_then_body() {
     assert_eq!(interpret("if (true) var x = 1;"), Err(RuntimeError::new(SourceLoc::new(1, 11), "parse error: Expect expression.", parse_backtrace())));
 }
+
+#[test]
+fn test_while() {
+    assert_eq!(interpret("var x = 0; while (x < 3) x = x + 1; return x;"), Ok(NumberVal(3.0)));
+}

@@ -212,6 +212,22 @@ impl Compiler {
         chunk.add_code(byte, token.line);
     }
 
+    fn emit_loop(&mut self, parser: &mut Parser, loop_start: usize, chunk: &mut Chunk) {
+        let line = parser.previous_token().line;
+        chunk.add_code_op(Op::Loop, line);
+        // The extra 2 is to adjust for the delta itself in the bytecode.
+        let cur_len = chunk.code_len();
+        assert!(cur_len >= loop_start - 2);
+        let delta = cur_len - loop_start + 2;
+
+        if delta > usize::from(u16::MAX) {
+            parser.error_from_last("Loop body too large.");
+        }
+
+        chunk.add_code(((delta >> 8) & 0xff) as u8, line);
+        chunk.add_code((delta & 0xff) as u8, line);
+    }
+
     fn emit_jump(&mut self, parser: &Parser, op: Op, chunk: &mut Chunk) -> usize {
         let token = parser.previous_token();
         chunk.add_code_op(op, token.line);
@@ -451,6 +467,23 @@ impl Compiler {
         self.patch_jump(parser, else_jump, chunk);
     }
 
+    fn while_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        let loop_start = chunk.code_len();
+        parser.consume(TokenType::LeftParen, "Expect '(' after 'while'.");
+        self.expression(parser, chunk);
+        parser.consume(TokenType::RightParen, "Expect ')' after condition.");
+
+        let exit_jump = self.emit_jump(parser, Op::JumpIfFalse, chunk);
+        // Pop the condition in the truthy case.
+        self.emit_op(parser, Op::Pop, chunk);
+        self.statement(parser, chunk);
+        self.emit_loop(parser, loop_start, chunk);
+
+        self.patch_jump(parser, exit_jump, chunk);
+        // Pop the condition in the falsey case.
+        self.emit_op(parser, Op::Pop, chunk);
+    }
+
     fn print_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
         self.expression(parser, chunk);
         parser.consume(TokenType::Semicolon, "Expect ';' after value.");
@@ -482,6 +515,8 @@ impl Compiler {
             self.print_statement(parser, chunk);
         } else if parser.matches(TokenType::If) {
             self.if_statement(parser, chunk);
+        } else if parser.matches(TokenType::While) {
+            self.while_statement(parser, chunk);
         } else if parser.matches(TokenType::LeftBrace) {
             self.begin_scope();
             self.block(parser, chunk);
