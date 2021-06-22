@@ -48,6 +48,10 @@ Custom features not mentioned in the book:
   - Native function: `array_push(arr, item)`
   - Native function: `array_pop(arr)`
 
+Optional features implemented in the bytecode VM:
+
+- `break` and `continue` statements inside loops
+
 ### Reference Tests
 
 To ensure correctness, the
