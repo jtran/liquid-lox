@@ -230,6 +230,24 @@ fn test_top_level_break() {
 }
 
 #[test]
+fn test_while_continue() {
+    assert_eq!(interpret("
+        var x = 0;
+        var y = 0;
+        while (x < 3) {
+            x = x + 1;
+            if (x >= 2) continue;
+            y = y + 1;
+        }
+        return y;"), Ok(NumberVal(1.0)));
+}
+
+#[test]
+fn test_top_level_continue() {
+    assert_eq!(interpret("1 + 2;\ncontinue;"), Err(RuntimeError::new(SourceLoc::new(2, 1), "parse error: Can't use 'continue' outside of a loop.", parse_backtrace())));
+}
+
+#[test]
 fn test_for_loop() {
     assert_eq!(interpret("var x = 1;
         for (var i = 0; i < 3; i = i + 1)
@@ -258,4 +276,26 @@ fn test_for_loop_break() {
             x = x * 2;
         }
         return x;"), Ok(NumberVal(8.0)));
+}
+
+#[test]
+fn test_for_loop_continue() {
+    assert_eq!(interpret("
+        var x = 0;
+        var y = 0;
+        for (; x < 3; x = x + 1) {
+            if (x >= 1) continue;
+            y = y + 1;
+        }
+        return y;"), Ok(NumberVal(1.0)));
+    // Extra local variable to test that it's popped correctly.
+    assert_eq!(interpret("
+        var x = 0;
+        var y = 0;
+        for (; x < 3; x = x + 1) {
+            var a;
+            if (x >= 1) continue;
+            y = y + 1;
+        }
+        return y;"), Ok(NumberVal(1.0)));
 }

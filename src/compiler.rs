@@ -41,7 +41,7 @@ pub struct Compiler {
     locals: Vec<Local>,
     // Zero is the global scope.  Each number higher is a level nested deeper.
     scope_depth: u8,
-    innermost_loop_scope_depth: Option<u8>,
+    innermost_loop: Option<Loop>,
     break_indexes: Vec<usize>,
 }
 
@@ -58,6 +58,12 @@ enum LocalDepth {
     Uninitialized,
     // The scope depth that this local variable was declared in.
     Depth(u8),
+}
+
+#[derive(Debug, Clone, Copy)]
+struct Loop {
+    start_op_index: usize,
+    scope_depth: u8,
 }
 
 #[derive(Debug)]
@@ -132,7 +138,7 @@ impl Compiler {
         Compiler {
             locals: Vec::with_capacity(U8_COUNT),
             scope_depth: 0,
-            innermost_loop_scope_depth: None,
+            innermost_loop: None,
             break_indexes: Vec::with_capacity(8),
         }
     }
@@ -159,6 +165,13 @@ impl Compiler {
         }
 
         Ok(chunk)
+    }
+
+    fn new_loop(&self, start_op_index: usize) -> Loop {
+        Loop {
+            start_op_index,
+            scope_depth: self.scope_depth,
+        }
     }
 
     fn begin_scope(&mut self) {
@@ -513,9 +526,10 @@ impl Compiler {
         }
 
         // Loop body.
-        let previous_innermost_scope_depth = self.innermost_loop_scope_depth.replace(self.scope_depth);
+        let cur_loop = self.new_loop(loop_start);
+        let previous_innermost_loop = self.innermost_loop.replace(cur_loop);
         self.statement(parser, chunk);
-        self.innermost_loop_scope_depth = previous_innermost_scope_depth;
+        self.innermost_loop = previous_innermost_loop;
         self.emit_loop(parser, loop_start, chunk);
 
         if let Some(exit_jump) = exit_jump {
@@ -564,9 +578,10 @@ impl Compiler {
         let exit_jump = self.emit_jump(parser, Op::JumpIfFalse, chunk);
         // Pop the condition in the truthy case.
         self.emit_op(parser, Op::Pop, chunk);
-        let previous_innermost_scope_depth = self.innermost_loop_scope_depth.replace(self.scope_depth);
+        let cur_loop = self.new_loop(loop_start);
+        let previous_innermost_loop = self.innermost_loop.replace(cur_loop);
         self.statement(parser, chunk);
-        self.innermost_loop_scope_depth = previous_innermost_scope_depth;
+        self.innermost_loop = previous_innermost_loop;
         self.emit_loop(parser, loop_start, chunk);
 
         self.patch_jump(parser, exit_jump, chunk);
@@ -595,23 +610,42 @@ impl Compiler {
     }
 
     fn break_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
-        match self.innermost_loop_scope_depth {
+        match self.innermost_loop {
             None => {
                 parser.error_from_last("Can't use 'break' outside of a loop.");
                 // This is a weird error case, but this is what the reference
                 // implementation does.
                 self.pop_all_locals(parser, chunk);
             }
-            Some(innermost_loop_scope_depth) => {
+            Some(innermost_loop) => {
                 parser.consume(TokenType::Semicolon, "Expect ';' after break.");
 
                 // Pop the local variables that were created inside the loop.
-                self.pop_locals_to_depth(parser, innermost_loop_scope_depth, chunk);
+                self.pop_locals_to_depth(parser, innermost_loop.scope_depth, chunk);
+
+                let break_jump = self.emit_jump(parser, Op::Jump, chunk);
+                self.break_indexes.push(break_jump);
             }
         }
+    }
 
-        let break_jump = self.emit_jump(parser, Op::Jump, chunk);
-        self.break_indexes.push(break_jump);
+    fn continue_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        match self.innermost_loop {
+            None => {
+                parser.error_from_last("Can't use 'continue' outside of a loop.");
+                // This is a weird error case, but this is what the reference
+                // implementation does.
+                self.pop_all_locals(parser, chunk);
+            }
+            Some(innermost_loop) => {
+                parser.consume(TokenType::Semicolon, "Expect ';' after continue.");
+
+                // Pop the local variables that were created inside the loop.
+                self.pop_locals_to_depth(parser, innermost_loop.scope_depth, chunk);
+
+                self.emit_loop(parser, innermost_loop.start_op_index, chunk);
+            }
+        }
     }
 
     fn declaration(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
@@ -643,6 +677,8 @@ impl Compiler {
             self.return_statement(parser, chunk);
         } else if parser.matches(TokenType::Break) {
             self.break_statement(parser, chunk);
+        } else if parser.matches(TokenType::Continue) {
+            self.continue_statement(parser, chunk);
         } else {
             self.expression_statement(parser, chunk);
         }
