@@ -41,6 +41,8 @@ pub struct Compiler {
     locals: Vec<Local>,
     // Zero is the global scope.  Each number higher is a level nested deeper.
     scope_depth: u8,
+    innermost_loop_scope_depth: Option<u8>,
+    break_indexes: Vec<usize>,
 }
 
 #[derive(Debug)]
@@ -130,6 +132,8 @@ impl Compiler {
         Compiler {
             locals: Vec::with_capacity(U8_COUNT),
             scope_depth: 0,
+            innermost_loop_scope_depth: None,
+            break_indexes: Vec::with_capacity(8),
         }
     }
 
@@ -186,27 +190,52 @@ impl Compiler {
         }
     }
 
+    fn pop_locals_to_depth(&self, parser: &Parser, scope_depth: u8, chunk: &mut Chunk) {
+        for i in (0..self.locals.len()).rev() {
+            let local = &self.locals[i];
+            match local.depth {
+                LocalDepth::Uninitialized => break,
+                LocalDepth::Depth(depth) => {
+                    if depth <= scope_depth {
+                        break;
+                    }
+                }
+            }
+            self.emit_op(parser, Op::Pop, chunk);
+        }
+    }
+
+    fn pop_all_locals(&self, parser: &Parser, chunk: &mut Chunk) {
+        for local in self.locals.iter().rev() {
+            match local.depth {
+                LocalDepth::Uninitialized => break,
+                LocalDepth::Depth(_) => {}
+            }
+            self.emit_op(parser, Op::Pop, chunk);
+        }
+    }
+
     fn emit_constant(&mut self, parser: &mut Parser, value: Value, chunk: &mut Chunk) {
         let byte = self.make_constant(parser, value, chunk);
         self.emit_op_with_byte_param(parser, Op::Constant, byte, chunk)
     }
 
-    fn emit_return(&mut self, parser: &Parser, chunk: &mut Chunk) {
+    fn emit_return(&self, parser: &Parser, chunk: &mut Chunk) {
         self.emit_op(parser, Op::Return, chunk)
     }
 
-    fn emit_op(&mut self, parser: &Parser, op: Op, chunk: &mut Chunk) {
+    fn emit_op(&self, parser: &Parser, op: Op, chunk: &mut Chunk) {
         let token = parser.previous_token();
         chunk.add_code_op(op, token.line);
     }
 
-    fn emit_ops(&mut self, parser: &Parser, op1: Op, op2: Op, chunk: &mut Chunk) {
+    fn emit_ops(&self, parser: &Parser, op1: Op, op2: Op, chunk: &mut Chunk) {
         let token = parser.previous_token();
         chunk.add_code_op(op1, token.line);
         chunk.add_code_op(op2, token.line);
     }
 
-    fn emit_op_with_byte_param(&mut self, parser: &Parser, op: Op, byte: u8, chunk: &mut Chunk) {
+    fn emit_op_with_byte_param(&self, parser: &Parser, op: Op, byte: u8, chunk: &mut Chunk) {
         let token = parser.previous_token();
         chunk.add_code_op(op, token.line);
         chunk.add_code(byte, token.line);
@@ -228,7 +257,7 @@ impl Compiler {
         chunk.add_code((delta & 0xff) as u8, line);
     }
 
-    fn emit_jump(&mut self, parser: &Parser, op: Op, chunk: &mut Chunk) -> usize {
+    fn emit_jump(&self, parser: &Parser, op: Op, chunk: &mut Chunk) -> usize {
         let token = parser.previous_token();
         chunk.add_code_op(op, token.line);
         // Location of jump amount that will be patched later.
@@ -484,13 +513,21 @@ impl Compiler {
         }
 
         // Loop body.
+        let previous_innermost_scope_depth = self.innermost_loop_scope_depth.replace(self.scope_depth);
         self.statement(parser, chunk);
+        self.innermost_loop_scope_depth = previous_innermost_scope_depth;
         self.emit_loop(parser, loop_start, chunk);
 
         if let Some(exit_jump) = exit_jump {
             self.patch_jump(parser, exit_jump, chunk);
             // Pop the condition.
             self.emit_op(parser, Op::Pop, chunk);
+        }
+
+        // Any break statement jumps here.
+        let break_indexes: Vec<_> = self.break_indexes.drain(..).collect();
+        for break_index in break_indexes.into_iter() {
+            self.patch_jump(parser, break_index, chunk);
         }
 
         self.end_scope(parser, chunk);
@@ -527,12 +564,20 @@ impl Compiler {
         let exit_jump = self.emit_jump(parser, Op::JumpIfFalse, chunk);
         // Pop the condition in the truthy case.
         self.emit_op(parser, Op::Pop, chunk);
+        let previous_innermost_scope_depth = self.innermost_loop_scope_depth.replace(self.scope_depth);
         self.statement(parser, chunk);
+        self.innermost_loop_scope_depth = previous_innermost_scope_depth;
         self.emit_loop(parser, loop_start, chunk);
 
         self.patch_jump(parser, exit_jump, chunk);
         // Pop the condition in the falsey case.
         self.emit_op(parser, Op::Pop, chunk);
+
+        // Any break statement jumps here.
+        let break_indexes: Vec<_> = self.break_indexes.drain(..).collect();
+        for break_index in break_indexes.into_iter() {
+            self.patch_jump(parser, break_index, chunk);
+        }
     }
 
     fn print_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
@@ -547,6 +592,26 @@ impl Compiler {
             parser.consume(TokenType::Semicolon, "Expect ';' after return value.");
         }
         self.emit_op(parser, Op::Return, chunk);
+    }
+
+    fn break_statement(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
+        match self.innermost_loop_scope_depth {
+            None => {
+                parser.error_from_last("Can't use 'break' outside of a loop.");
+                // This is a weird error case, but this is what the reference
+                // implementation does.
+                self.pop_all_locals(parser, chunk);
+            }
+            Some(innermost_loop_scope_depth) => {
+                parser.consume(TokenType::Semicolon, "Expect ';' after break.");
+
+                // Pop the local variables that were created inside the loop.
+                self.pop_locals_to_depth(parser, innermost_loop_scope_depth, chunk);
+            }
+        }
+
+        let break_jump = self.emit_jump(parser, Op::Jump, chunk);
+        self.break_indexes.push(break_jump);
     }
 
     fn declaration(&mut self, parser: &mut Parser, chunk: &mut Chunk) {
@@ -576,6 +641,8 @@ impl Compiler {
             self.end_scope(parser, chunk);
         } else if parser.matches(TokenType::Return) {
             self.return_statement(parser, chunk);
+        } else if parser.matches(TokenType::Break) {
+            self.break_statement(parser, chunk);
         } else {
             self.expression_statement(parser, chunk);
         }

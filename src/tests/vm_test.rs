@@ -218,6 +218,18 @@ fn test_while() {
 }
 
 #[test]
+fn test_while_break() {
+    assert_eq!(interpret("var x = 0; while (true) { if (x > 3) break; x = x + 1; } return x;"), Ok(NumberVal(4.0)));
+    // Extra local variable to test that it's popped correctly.
+    assert_eq!(interpret("var x = 0; while (true) { var y; if (x > 3) break; x = x + 1; } return x;"), Ok(NumberVal(4.0)));
+}
+
+#[test]
+fn test_top_level_break() {
+    assert_eq!(interpret("1 + 2;\nbreak;"), Err(RuntimeError::new(SourceLoc::new(2, 1), "parse error: Can't use 'break' outside of a loop.", parse_backtrace())));
+}
+
+#[test]
 fn test_for_loop() {
     assert_eq!(interpret("var x = 1;
         for (var i = 0; i < 3; i = i + 1)
@@ -225,6 +237,24 @@ fn test_for_loop() {
         return x;"), Ok(NumberVal(8.0)));
     assert_eq!(interpret("var x = 1;
         for (var i = 0; i < 3; i = i + 1) {
+            x = x * 2;
+        }
+        return x;"), Ok(NumberVal(8.0)));
+}
+
+#[test]
+fn test_for_loop_break() {
+    assert_eq!(interpret("var x = 1;
+        for (var i = 0; i < 10; i = i + 1) {
+            if (i >= 3) break;
+            x = x * 2;
+        }
+        return x;"), Ok(NumberVal(8.0)));
+    // Extra local variable to test that it's popped correctly.
+    assert_eq!(interpret("var x = 1;
+        for (var i = 0; i < 10; i = i + 1) {
+            var y;
+            if (i >= 3) break;
             x = x * 2;
         }
         return x;"), Ok(NumberVal(8.0)));
