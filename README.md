@@ -12,7 +12,7 @@ A few notable highlights of this implementation:
 - Arrays
 - Metaclasses
 - Unicode variable names
-- `break` and `continue`
+- Written in 100% safe Rust
 - Free software license
 
 A second entire implementation using a byte-code virtual machine is under
