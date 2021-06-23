@@ -1,4 +1,4 @@
-## Liquid Lox
+# Liquid Lox
 
 This is an interpreter for the Lox language from
 [Crafting Interpreters](https://www.craftinginterpreters.com/).  Lox is a
@@ -20,7 +20,14 @@ development.
 
 See below for the gory details.
 
-### Differences from the Reference Implementation
+## Tree-Walking Interpreter
+
+This project contains two separate implementations of the language.
+
+The first implementation, the tree-walking interpeter, is feature-complete and
+is designed to be simple for experimentation.
+
+### Differences from the Reference Implementation jlox
 
 Optional challenges and features implemented in the tree-walking interpreter:
 
@@ -48,10 +55,6 @@ Custom features not mentioned in the book:
   - Native function: `array_push(arr, item)`
   - Native function: `array_pop(arr)`
 
-Optional features implemented in the bytecode VM:
-
-- `break` and `continue` statements inside loops
-
 ### Reference Tests
 
 To ensure correctness, the
@@ -72,6 +75,26 @@ Like the reference implementation, we skip limit tests that don't apply.
 - Because the interpreter uses reference counting and doesn't (yet) implement a
   garbage collector, many input programs create reference cycles and leak
   memory.
+
+## Bytecode VM
+
+The bytecode virtual machine is the second implementation in this project and is
+currently under development.  Major features that haven't been done yet are:
+
+- functions
+- closures
+- classes
+- garbage collection
+
+### Differences from the Reference Implementation clox
+
+Optional features implemented in the bytecode VM:
+
+- `break` and `continue` statements inside loops
+
+Custom features not mentioned in the book:
+
+- Unicode variable names using grapheme clusters, not just code points
 
 ## Building
 
