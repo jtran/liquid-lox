@@ -288,7 +288,8 @@ impl Compiler {
         match u8::try_from(constant) {
             Err(_) => {
                 parser.error_from_last("Too many constants in one chunk.");
-                return 0;
+
+                0
             }
             Ok(byte) => byte,
         }
