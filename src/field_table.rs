@@ -24,7 +24,12 @@ impl FieldTable {
         self.map.get(name).cloned()
     }
 
-    pub fn set(&mut self, name: &str, new_value: Value) {
-        self.map.insert(name.to_string(), new_value);
+    // Returns true if a new entry was added.
+    pub fn set(&mut self, name: &str, new_value: Value) -> bool {
+        self.map.insert(name.to_string(), new_value).is_none()
+    }
+
+    pub fn delete(&mut self, name: &str) {
+        self.map.remove(name);
     }
 }

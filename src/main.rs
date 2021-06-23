@@ -1,8 +1,10 @@
 mod ast;
+mod compiler;
 mod environment;
 mod error;
 mod field_table;
 mod interpreter;
+mod op;
 mod parser;
 mod resolver;
 mod scanner;
@@ -10,6 +12,7 @@ mod source_loc;
 mod token;
 mod util;
 mod value;
+mod vm;
 
 #[cfg(test)]
 mod tests;
@@ -18,12 +21,20 @@ use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::process;
+use std::rc::Rc;
 
-use argparse::{ArgumentParser, Print, Store};
+use argparse::{ArgumentParser, Print, Store, StoreTrue};
 
+use crate::compiler::*;
 use crate::error::*;
 use crate::interpreter::*;
 use crate::value::*;
+use crate::vm::*;
+
+enum InterpreterImpl {
+    TreeWalking(Interpreter),
+    ByteCodeVm(Vm),
+}
 
 enum RunError {
     RunParseError(ParseError),
@@ -31,10 +42,15 @@ enum RunError {
 }
 
 fn main() {
+    let mut use_byte_code_vm = false;
     let mut script_filename = "".to_string();
     {
         let mut ap = ArgumentParser::new();
         ap.set_description("Lox language interpreter");
+        ap.refer(&mut use_byte_code_vm)
+            .add_option(&["--vm"],
+                        StoreTrue,
+                        "Interpret using the byte-code virtual machine");
         ap.add_option(
             &["--version"],
             Print(env!("CARGO_PKG_VERSION").to_string()),
@@ -45,8 +61,13 @@ fn main() {
                           "Lox file to execute.  Omit to run an interactive REPL.");
         ap.parse_args_or_exit();
     }
+    let interpreter = if use_byte_code_vm {
+        InterpreterImpl::ByteCodeVm(Vm::new())
+    } else {
+        InterpreterImpl::TreeWalking(Interpreter::new())
+    };
     if ! script_filename.is_empty() {
-        let run_result = run_file(&script_filename);
+        let run_result = run_file(&script_filename, interpreter);
 
         match run_result {
             Ok(_) => (),
@@ -55,13 +76,12 @@ fn main() {
         }
     }
     else {
-        run_repl();
+        run_repl(interpreter);
     }
 }
 
-fn run_repl() {
+fn run_repl(mut interpreter: InterpreterImpl) {
     let stdin = io::stdin();
-    let mut interpreter = Interpreter::new();
     loop {
         print!("> ");
         io::stdout().flush().expect("run_repl: unable to flush stdout");
@@ -81,30 +101,46 @@ fn run_repl() {
 }
 
 // Returns true if there was an error running the file.
-fn run_file(file_path: &str) -> Result<Value, RunError> {
-    let mut file = File::open(file_path).unwrap_or_else(|_| panic!("source file not found: {}", file_path));
+fn run_file(file_path: &str, mut interpreter: InterpreterImpl) -> Result<Value, RunError> {
+    let mut file = File::open(file_path).unwrap_or_else(|_| {
+        eprintln!("Could not open file \"{}\".", file_path);
+        std::process::exit(74);
+    });
     let mut contents = String::new();
-    file.read_to_string(&mut contents).unwrap_or_else(|_| panic!("unable to read file: {}", file_path));
+    file.read_to_string(&mut contents).unwrap_or_else(|_| {
+        eprintln!("Could not read file \"{}\".", file_path);
+        std::process::exit(74);
+    });
 
-    let mut interpreter = Interpreter::new();
     let result = run(&mut interpreter, contents, false);
     print_result(&result, false);
 
     result
 }
 
-fn run(interpreter: &mut Interpreter, source: String, for_repl: bool)
+fn run(interpreter: &mut InterpreterImpl, source: String, for_repl: bool)
     -> Result<Value, RunError>
 {
-    // If there's a parse error, it's converted to a run error here.
-    let ast = if for_repl {
-        parser::parse_repl_line(&source)
-    }
-    else {
-        parser::parse(&source)
-    }?;
-    let code = resolver::resolve(ast)?;
-    let result = interpreter.interpret(&code);
+    let result = match interpreter {
+        InterpreterImpl::TreeWalking(interpreter) => {
+            // If there's a parse error, it's converted to a run error here.
+            let ast = if for_repl {
+                parser::parse_repl_line(&source)
+            }
+            else {
+                parser::parse(&source)
+            }?;
+            let code = resolver::resolve(ast)?;
+
+            interpreter.interpret(&code)
+        }
+        InterpreterImpl::ByteCodeVm(vm) => {
+            let mut compiler = Compiler::new();
+            let chunk = compiler.compile(&source)?;
+
+            vm.interpret_chunk(Rc::new(chunk))
+        }
+    };
 
     result.map_err(|err| err.into())
 }

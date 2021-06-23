@@ -1,4 +1,4 @@
-## Liquid Lox
+# Liquid Lox
 
 This is an interpreter for the Lox language from
 [Crafting Interpreters](https://www.craftinginterpreters.com/).  Lox is a
@@ -15,11 +15,21 @@ A few notable highlights of this implementation:
 - `break` and `continue`
 - Free software license
 
+A second entire implementation using a byte-code virtual machine is under
+development.
+
 See below for the gory details.
 
-### Differences from the Reference Implementation
+## Tree-Walking Interpreter
 
-Optional challenges and features implemented:
+This project contains two separate implementations of the language.
+
+The first implementation, the tree-walking interpeter, is feature-complete and
+is designed to be simple for experimentation.
+
+### Differences from the Reference Implementation jlox
+
+Optional challenges and features implemented in the tree-walking interpreter:
 
 - Pass the reference implementation's test suite (see status for exact counts)
 - Column number of source, in addition to line number, is displayed in error
@@ -45,10 +55,6 @@ Custom features not mentioned in the book:
   - Native function: `array_push(arr, item)`
   - Native function: `array_pop(arr)`
 
-Features that will probably never be implemented:
-
-- Better runtime performance by using a bytecode virtual machine
-
 ### Reference Tests
 
 To ensure correctness, the
@@ -70,6 +76,26 @@ Like the reference implementation, we skip limit tests that don't apply.
   garbage collector, many input programs create reference cycles and leak
   memory.
 
+## Bytecode VM
+
+The bytecode virtual machine is the second implementation in this project and is
+currently under development.  Major features that haven't been done yet are:
+
+- functions
+- closures
+- classes
+- garbage collection
+
+### Differences from the Reference Implementation clox
+
+Optional features implemented in the bytecode VM:
+
+- `break` and `continue` statements inside loops
+
+Custom features not mentioned in the book:
+
+- Unicode variable names using grapheme clusters, not just code points
+
 ## Building
 
 ```shell
@@ -90,6 +116,12 @@ Run a Lox REPL:
 
 ```shell
 lox
+```
+
+To use the byte-code virtual machine, which is still a work-in-progress, use:
+
+```shell
+lox --vm
 ```
 
 ## Running Tests
