@@ -231,7 +231,7 @@ impl RuntimeClass {
 }
 
 #[derive(Clone, Debug)]
-pub struct InstanceRef(pub Rc<RefCell<Instance>>);
+pub struct InstanceRef(Rc<RefCell<Instance>>);
 
 impl InstanceRef {
     pub fn new(class: ClassRef) -> InstanceRef {
